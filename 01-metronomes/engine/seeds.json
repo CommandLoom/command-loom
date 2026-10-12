@@ -1,0 +1,33 @@
+{
+  "two": {
+    "n": 2,
+    "spread": 0.1,
+    "seed": 1,
+    "stableFrom": 50.41
+  },
+  "split": {
+    "n": 2,
+    "spread": 0.1,
+    "seed": 5,
+    "stableFrom": 51.13,
+    "fixedMinGap": 118.8
+  },
+  "ten": {
+    "n": 10,
+    "spread": 0.3,
+    "seed": 1,
+    "stableFrom": 66.12
+  },
+  "hundred": {
+    "n": 100,
+    "spread": 0.3,
+    "seed": 2,
+    "stableFrom": 94.76
+  },
+  "opening": {
+    "n": 100,
+    "spread": 0.3,
+    "seed": 1000,
+    "maxShare15s": 0.19
+  }
+}

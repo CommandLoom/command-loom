@@ -1,0 +1,10 @@
+# rendered videos and frames
+*.mp4
+*.webm
+*.png
+*.jpg
+# system files
+Thumbs.db
+desktop.ini
+.DS_Store
+node_modules/
