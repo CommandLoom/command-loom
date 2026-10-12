@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Command Loom · 02 Double Pendulums</title>
+<style>body{margin:0;background:#070c16;color:#ecf2fb;font:16px "Segoe UI",sans-serif}main{max-width:1500px;margin:auto;padding:18px}h1{font-size:22px;margin:0 0 14px}canvas#screen{display:block;width:100%;aspect-ratio:16/9;background:#070c16}button{background:#192638;color:#e8edf5;border:1px solid #354c64;padding:9px 14px;margin:8px 5px 0 0;border-radius:6px;cursor:pointer}button:disabled{opacity:.4}input[type=range]{width:100%}.muted{color:#9fb2c9}#message{white-space:pre-wrap;padding:12px 0;line-height:1.5}#scenes{margin:6px 0}label{display:inline-block;margin:12px}body.batch main{padding:0}body.batch #panel{display:none}</style>
+</head><body><main><div id="panel"><h1>Command Loom · 02 Double Pendulums</h1>
+<div class="muted">Measured runs · 1920×1080 · 30 fps</div></div>
+<canvas id="screen" width="1920" height="1080"></canvas>
+<div id="panel2"><div id="scenes"></div><input id="position" type="range" step=".033333333" min="0" value="0">
+<button id="play">Play / pause</button><label><input id="sound" type="checkbox"> Sound</label>
+<button id="full">Export full MP4</button><button id="test">Test MP4: first 30 s + comparison</button><button id="still">Save PNG</button><button id="cancel">Cancel export</button>
+<div id="message">Loading measured geometry…</div><div class="muted">Full video about 2:20. Chrome or Edge recommended. Sound: a soft synthesized marimba note each time the bob of one of 16 representative pendulums crosses the centre line.</div></div></main>
+<script src="vendor/three-r128.min.js"></script><script src="vendor/mp4-muxer-5.1.3.min.js"></script>
+<script src="engine/spread.js?v=rev2b"></script><script src="engine/revision_run.js?v=rev2b"></script><script src="engine/world.js?v=rev2b"></script><script src="engine/sound_events.js?v=rev2b"></script><script src="engine/sound.js?v=rev2b"></script><script src="engine/director.js?v=rev2b"></script>
+<script>
+(async function(){
+"use strict";
+const D=window.PendulumDirector,$=id=>document.getElementById(id),params=new URLSearchParams(location.search),batch=params.get("batch");
+const canvas=$("screen"),ctx=canvas.getContext("2d",{alpha:false});
+const glCanvas=document.createElement("canvas"),renderer=new THREE.WebGLRenderer({canvas:glCanvas,antialias:true,preserveDrawingBuffer:true,alpha:false});
+renderer.setPixelRatio(1);renderer.setSize(1920,1080,false);
+const R=D.Runtime();let playing=false,busy=false,cancel=false,time=0,last=0,audio=null,buffer=null,source=null,fullMix=null;
+function msg(s){$("message").textContent=s;}
+function draw(t){R.at(t);D.renderFrame(R,renderer,1920,1080);ctx.drawImage(glCanvas,0,0);D.drawOverlay(R,ctx,1920,1080);$("position").value=t;}
+function save(blob,name){const a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+async function artifact(name,blob){const r=await fetch("/artifact/"+encodeURIComponent(name),{method:"POST",body:blob});if(!r.ok)throw Error(await r.text());}
+async function progress(data){if(batch)await artifact("progress.json",new Blob([JSON.stringify(data)],{type:"application/json"}));}
+function audioStop(){if(source){try{source.stop();}catch{}source=null;}}
+async function audioStart(){
+ audioStop();if(!playing||!$("sound").checked)return;
+ audio=audio||new AudioContext();await audio.resume();
+ if(!buffer){fullMix=fullMix||D.synthesize([[0,D.total]]);buffer=audio.createBuffer(2,fullMix.len,48000);buffer.copyToChannel(fullMix.L,0);buffer.copyToChannel(fullMix.R,1);}
+ source=audio.createBufferSource();source.buffer=buffer;source.connect(audio.destination);source.start(0,Math.min(time,D.total-.01));
+}
+function seek(t){time=t;draw(time);audioStart();}
+async function encode(ranges,name,batchOutput=false){
+ if(busy)return;busy=true;cancel=false;playing=false;audioStop();document.querySelectorAll("button").forEach(b=>b.disabled=true);$("cancel").disabled=false;
+ let videoEncoder,audioEncoder;
+ try{
+  if(!window.VideoEncoder||!window.AudioEncoder)throw Error("This browser does not support H.264/AAC WebCodecs. Use Chrome or Edge.");
+  // try several H.264 profiles/levels and acceleration modes; AAC first, Opus as fallback
+  let vc=null,ac=null,amux="aac";
+  for(const codec of ["avc1.640028","avc1.64002a","avc1.4d0028","avc1.640033","avc1.42e028"])for(const hardwareAcceleration of ["no-preference","prefer-software","prefer-hardware"]){
+   if(vc)break;try{const r=await VideoEncoder.isConfigSupported({codec,width:1920,height:1080,bitrate:12000000,framerate:30,avc:{format:"avc"},hardwareAcceleration});if(r.supported)vc=r;}catch(e){}}
+  for(const [codec,mux] of [["mp4a.40.2","aac"],["opus","opus"]]){if(ac)break;try{const r=await AudioEncoder.isConfigSupported({codec,sampleRate:48000,numberOfChannels:2,bitrate:192000});if(r.supported){ac=r;amux=mux;}}catch(e){}}
+  if(!vc)throw Error("This browser cannot encode H.264 video (tried avc1 High/Main/Baseline). Try an up-to-date Chrome or Edge.");
+  if(!ac)throw Error("This browser cannot encode AAC or Opus audio. Try an up-to-date Chrome or Edge.");
+  msg("Encoder: "+vc.config.codec+" ("+(vc.config.hardwareAcceleration||"")+") + "+ac.config.codec);
+  const mix=D.synthesize(ranges),frames=Math.round(mix.duration*30);
+  const muxer=new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),video:{codec:"avc",width:1920,height:1080},audio:{codec:amux,sampleRate:48000,numberOfChannels:2},fastStart:"in-memory",firstTimestampBehavior:"offset"});
+  let failure=null;videoEncoder=new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta),error:e=>failure=e});videoEncoder.configure(vc.config);
+  audioEncoder=new AudioEncoder({output:(chunk,meta)=>muxer.addAudioChunk(chunk,meta),error:e=>failure=e});audioEncoder.configure(ac.config);
+  let f=0;
+  for(const [start,end] of ranges)for(let j=0;j<Math.round((end-start)*30);j++){
+   if(cancel)throw Error("Export cancelled.");if(failure)throw failure;
+   draw(start+j/30);const frame=new VideoFrame(canvas,{timestamp:Math.round(f*1e6/30),duration:Math.round(1e6/30)});
+   videoEncoder.encode(frame,{keyFrame:f%60===0});frame.close();f++;
+   while(videoEncoder.encodeQueueSize>5)await new Promise(r=>videoEncoder.addEventListener("dequeue",r,{once:true}));
+   if(f%30===0){msg(name+" · "+f+"/"+frames+" frames");await progress({stage:"encoding",frame:f,frames,name});await new Promise(r=>setTimeout(r,0));}
+  }
+  await videoEncoder.flush();videoEncoder.close();videoEncoder=null;
+  for(let off=0;off<mix.len;off+=4800){
+   const n=Math.min(4800,mix.len-off),data=new Float32Array(n*2);data.set(mix.L.subarray(off,off+n));data.set(mix.R.subarray(off,off+n),n);
+   const ad=new AudioData({format:"f32-planar",sampleRate:48000,numberOfFrames:n,numberOfChannels:2,timestamp:Math.round(off*1e6/48000),data});audioEncoder.encode(ad);ad.close();
+   while(audioEncoder.encodeQueueSize>8)await new Promise(r=>audioEncoder.addEventListener("dequeue",r,{once:true}));if(failure)throw failure;
+  }
+  await audioEncoder.flush();audioEncoder.close();audioEncoder=null;muxer.finalize();
+  const blob=new Blob([muxer.target.buffer],{type:"video/mp4"});
+  if(batchOutput){await artifact(name,blob);await artifact("test_audio_segments.json",new Blob([JSON.stringify(mix.blocks,null,2)]));}
+  else save(blob,name);
+  msg(name+" ready · "+mix.duration.toFixed(2)+" s · "+(blob.size/1048576).toFixed(1)+" MB");
+  return {name,frames,duration:mix.duration,bytes:blob.size,blocks:mix.blocks};
+ }finally{try{videoEncoder?.close();}catch{}try{audioEncoder?.close();}catch{}busy=false;document.querySelectorAll("button").forEach(b=>b.disabled=false);}
+}
+function wav(mix){
+ const b=new ArrayBuffer(44+mix.len*8),v=new DataView(b);const str=(off,s)=>{for(let i=0;i<s.length;i++)v.setUint8(off+i,s.charCodeAt(i));};
+ str(0,"RIFF");v.setUint32(4,b.byteLength-8,true);str(8,"WAVE");str(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,3,true);v.setUint16(22,2,true);v.setUint32(24,48000,true);v.setUint32(28,48000*8,true);v.setUint16(32,8,true);v.setUint16(34,32,true);str(36,"data");v.setUint32(40,mix.len*8,true);
+ for(let i=0;i<mix.len;i++){v.setFloat32(44+i*8,mix.L[i],true);v.setFloat32(48+i*8,mix.R[i],true);}return new Blob([b],{type:"audio/wav"});
+}
+function loop(now){if(last&&playing&&!busy){time=Math.min(D.total-1/30,time+(now-last)/1000);draw(time);if(time>=D.total-1/30){playing=false;audioStop();}}last=now;requestAnimationFrame(loop);}
+try{
+ await D.ready();$("position").max=D.total-1/30;
+ D.SCENES.forEach((s,i)=>{const b=document.createElement("button");b.textContent=s.name;b.onclick=()=>seek(s.start);$("scenes").appendChild(b);});
+ $("position").oninput=e=>seek(Number(e.target.value));$("play").onclick=()=>{playing=!playing;audioStart();};$("sound").onchange=audioStart;
+ const comp=D.SCENES.find(s=>s.id==="comparison"),angleEnd=D.SCENES.find(s=>s.id==="angle100").end;
+ const testRanges=[[0,30],[comp.start,angleEnd]];
+ $("full").onclick=()=>encode([[0,D.total]],"Command Loom - 02 Double Pendulums.mp4").catch(e=>msg(e.stack));
+ $("test").onclick=()=>encode(testRanges,"Command Loom - 02 Double Pendulums - TEST.mp4").catch(e=>msg(e.stack));
+ $("still").onclick=()=>canvas.toBlob(b=>save(b,"Control - "+R.sc.id+".png"),"image/png");$("cancel").onclick=()=>cancel=true;
+ draw(0);msg("Ready · "+D.total.toFixed(2)+" s · "+Math.round(D.total*30)+" frames");window.__app={D,R,draw,encode,renderer};
+ if(batch){
+  document.body.classList.add("batch");$("panel2").style.display="none";
+  await progress({stage:"loaded",total:D.total,scenes:D.SCENES,renderer:renderer.getContext().getParameter(renderer.getContext().RENDERER)});
+  for(let i=0;i<D.SCENES.length;i++){const sc=D.SCENES[i];draw(sc.start+sc.dur/2);const blob=await new Promise(r=>canvas.toBlob(r,"image/png"));await artifact("control_"+String(i).padStart(2,"0")+"_"+sc.id+".png",blob);}
+  for(const [name,t] of [["start",D.SCENES[1].start],["fan",D.SCENES[2].start+3],["replay_fan",D.SCENES[3].start+(12.4-D.SCENES[3].simStart)/.25]]){draw(t);await artifact("detail_"+name+".png",await new Promise(r=>canvas.toBlob(r,"image/png")));}
+  if(batch==="controls"){await progress({stage:"controls_done",total:D.total});return;}
+  fullMix=D.synthesize([[0,D.total]]);await artifact("full_audio.wav",wav(fullMix));await artifact("full_audio_segments.json",new Blob([JSON.stringify(fullMix.blocks,null,2)]));
+  const result=await encode(testRanges,"Command Loom - 02 Double Pendulums - TEST.mp4",true);await progress({stage:"done",...result});return;
+ }
+ requestAnimationFrame(loop);
+}catch(e){msg("Error: "+e.stack);if(batch)await progress({stage:"error",message:e.stack});}
+})();
+</script></body></html>
