@@ -1,0 +1,97 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-cache">
+<title>Command Loom · 03 Fireflies</title><style>body{margin:0;background:#0b1523;color:#ecf0db;font:16px "Segoe UI",sans-serif}main{max-width:1500px;margin:auto;padding:18px}h1{font-size:22px}canvas{width:100%;aspect-ratio:16/9;background:#101d29;display:block}button,select{font:inherit;color:#ecf0db;background:#23362c;border:1px solid #4b6548;border-radius:6px;padding:9px 12px;margin:7px 6px 5px 0}button:disabled{opacity:.45}input[type=range]{width:100%}#message{padding:12px 0;white-space:pre-wrap}.muted{color:#a2b8a7}label{display:inline-block;margin:8px}body.batch main{padding:0}body.batch .ui{display:none}</style></head><body><main>
+<div class="ui"><h1>Command Loom · 03 Fireflies</h1><div class="muted">One light → 1,000 separate fireflies → one shared pulse.</div></div>
+<canvas id="screen" width="1920" height="1080"></canvas><div class="ui"><div id="scenes"></div><input id="position" type="range" min="0" value="0" step=".033333333">
+<button id="play">Play / pause</button><label><input type="checkbox" id="sound"> Sound</label><span class="muted">Sound: short glass notes</span>
+<button id="audition">30 s sound reference clip</button><button id="test">Test MP4: first 30 s</button><button id="still">Save PNG</button><button id="full">Export full MP4</button><button id="cancel">Cancel export</button>
+<div id="codec" class="muted"></div><div id="message">Loading model data…</div><div class="muted">Preview and export use the same model events. The MP4 is saved to your downloads folder. Keep the tab and the server window open during a full export.</div></div></main>
+<script src="vendor/three-r128.min.js"></script><script src="vendor/mp4-muxer-5.1.3.min.js"></script>
+<script src="engine/sim.js?v=1"></script><script src="engine/seeds.js?v=1"></script><script src="engine/world.js?v=1"></script><script src="engine/sound.js?v=1"></script><script src="engine/director.js?v=1"></script>
+<script>
+(async()=>{
+"use strict";
+const D=window.FireflyDirector,P=window.FireflySound,$=id=>document.getElementById(id),batch=new URLSearchParams(location.search).get("batch");
+const canvas=$("screen"),ctx=canvas.getContext("2d",{alpha:false}),gl=document.createElement("canvas"),renderer=new THREE.WebGLRenderer({canvas:gl,antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(1);renderer.setSize(1920,1080,false);
+let scenes=D.SCENES,R=D.Runtime(),time=0,last=0,playing=false,busy=false,cancel=false,audio=null,source=null,style="glass",mixes={};
+const msg=s=>$("message").textContent=s;
+function draw(t,runtime=R){runtime.at(t);D.renderFrame(runtime,renderer,1920,1080);ctx.drawImage(gl,0,0);D.drawOverlay(runtime,ctx,1920,1080);$("position").value=t;}
+function stopAudio(){try{source?.stop();}catch{}source=null;}
+async function startAudio(){stopAudio();if(!playing||!$("sound").checked)return;audio=audio||new AudioContext();await audio.resume();const m=mixes[style]||(mixes[style]=P.render(D.timeline(D.SCENES,[[0,D.total]]).events,D.total,style));
+const b=audio.createBuffer(2,m.len,48000);b.copyToChannel(m.L,0);b.copyToChannel(m.R,1);source=audio.createBufferSource();source.buffer=b;source.connect(audio.destination);source.start(0,Math.min(time,D.total-.02));}
+function seek(t){time=t;draw(t);startAudio();}
+async function artifact(name,blob){const r=await fetch("/artifact/"+encodeURIComponent(name),{method:"POST",body:blob});if(!r.ok)throw Error(await r.text());}
+function save(blob,name){const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+async function codecs(){
+ if(!window.VideoEncoder||!window.AudioEncoder)throw Error("WebCodecs not available. Use Chrome or Edge.");
+ let video,audio,audioMux;
+ for(const codec of ["avc1.640028","avc1.64002a","avc1.4d0028","avc1.640033","avc1.42e028"]){
+  for(const hardwareAcceleration of ["no-preference","prefer-software","prefer-hardware"]){try{const c=await VideoEncoder.isConfigSupported({codec,width:1920,height:1080,bitrate:12000000,framerate:30,avc:{format:"avc"},hardwareAcceleration});if(c.supported){video=c.config;break;}}catch{}}
+  if(video)break;
+ }
+ for(const [codec,mux]of [["mp4a.40.2","aac"],["opus","opus"]]){try{const c=await AudioEncoder.isConfigSupported({codec,sampleRate:48000,numberOfChannels:2,bitrate:192000});if(c.supported){audio=c.config;audioMux=mux;break;}}catch{}}
+ if(!video||!audio)throw Error("No H.264 and AAC/Opus encoder found. Try an up-to-date Chrome or Edge.");
+ return{video,audio,audioMux};
+}
+const channel=new MessageChannel();let yields=[];channel.port1.onmessage=()=>yields.shift()?.();const breathe=()=>new Promise(r=>{yields.push(r);channel.port2.postMessage(0);});
+async function pressure(enc,max,getFailure){while(enc.encodeQueueSize>max){await new Promise(resolve=>{const done=()=>{clearTimeout(timer);enc.removeEventListener("dequeue",done);resolve();};const timer=setTimeout(done,1000);enc.addEventListener("dequeue",done,{once:true});});if(getFailure())throw getFailure();}}
+function wav(m){
+ const b=new ArrayBuffer(44+m.len*8),v=new DataView(b);const txt=(i,s)=>{for(let j=0;j<s.length;j++)v.setUint8(i+j,s.charCodeAt(j));};txt(0,"RIFF");v.setUint32(4,b.byteLength-8,true);txt(8,"WAVE");txt(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,3,true);v.setUint16(22,2,true);v.setUint32(24,48000,true);v.setUint32(28,384000,true);v.setUint16(32,8,true);v.setUint16(34,32,true);txt(36,"data");v.setUint32(40,m.len*8,true);
+ for(let i=0;i<m.len;i++){v.setFloat32(44+i*8,m.L[i],true);v.setFloat32(48+i*8,m.R[i],true);}return new Blob([b],{type:"audio/wav"});
+}
+async function encode(list,duration,voice,name,toServer=false,ranges=null){
+ if(busy)return;busy=true;playing=false;cancel=false;stopAudio();document.querySelectorAll("button").forEach(b=>b.disabled=true);$("cancel").disabled=false;
+ let ve,ae;
+ try{
+  const c=await codecs();$("codec").textContent="Encoder: "+c.video.codec+" ("+c.video.hardwareAcceleration+") + "+c.audio.codec;
+  const tl=D.timeline(list,ranges||[[0,duration]]),m=P.render(tl.events,duration,voice),runtime=D.Runtime(list),frames=Math.round(duration*30);
+  const muxer=new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),video:{codec:"avc",width:1920,height:1080,frameRate:30},audio:{codec:c.audioMux,sampleRate:48000,numberOfChannels:2},firstTimestampBehavior:"offset",fastStart:"in-memory"});
+  let failure=null;
+  ve=new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta),error:e=>failure=e});ve.configure(c.video);
+  ae=new AudioEncoder({output:(chunk,meta)=>muxer.addAudioChunk(chunk,meta),error:e=>failure=e});ae.configure(c.audio);
+  for(let f=0;f<frames;f++){
+   if(cancel||failure)throw failure||Error("Export cancelled.");let displayTime=f/30;if(ranges){let offset=0;for(const [a,b]of ranges){if(displayTime<offset+b-a){displayTime=a+displayTime-offset;break;}offset+=b-a;}}draw(displayTime,runtime);
+   const vf=new VideoFrame(canvas,{timestamp:Math.round(f*1e6/30),duration:Math.round(1e6/30)});ve.encode(vf,{keyFrame:f%60===0});vf.close();
+   await pressure(ve,5,()=>failure);
+   if(f%30===0){msg(name+" · "+f+"/"+frames+" frames");if(toServer)await artifact("progress.json",new Blob([JSON.stringify({stage:"encoding",name,frame:f,frames})]));await breathe();}
+  }
+  await ve.flush();ve.close();ve=null;
+  for(let i=0;i<m.len;i+=4800){
+   if(cancel||failure)throw failure||Error("Export cancelled.");
+   const n=Math.min(4800,m.len-i),data=new Float32Array(n*2);data.set(m.L.subarray(i,i+n));data.set(m.R.subarray(i,i+n),n);
+   const ad=new AudioData({format:"f32-planar",sampleRate:48000,numberOfChannels:2,numberOfFrames:n,timestamp:Math.round(i*1e6/48000),data});ae.encode(ad);ad.close();await pressure(ae,8,()=>failure);
+  }
+  await ae.flush();ae.close();ae=null;if(failure)throw failure;muxer.finalize();
+  const blob=new Blob([muxer.target.buffer],{type:"video/mp4"}),report={name,voice,frames,duration,bytes:blob.size,events:tl.events.length,...P.stats(m.L,m.R),codecs:c};
+  if(toServer){await artifact(name,blob);await artifact(name+".json",new Blob([JSON.stringify(report,null,2)]));await artifact(name+".wav",wav(m));}else save(blob,name);
+  runtime.worlds.forEach(w=>w.stage.dispose());msg(name+" ready.");return report;
+ }finally{try{ve?.close();}catch{}try{ae?.close();}catch{}busy=false;document.querySelectorAll("button").forEach(b=>b.disabled=false);$("full").disabled=false;}
+}
+try{
+ $("position").max=D.total-1/30;D.SCENES.forEach(s=>{const b=document.createElement("button");b.textContent=s.name;b.onclick=()=>seek(s.start);$("scenes").appendChild(b);});
+ $("play").onclick=()=>{playing=!playing;startAudio();};$("sound").onchange=startAudio;
+ $("position").oninput=e=>seek(Number(e.target.value));$("cancel").onclick=()=>cancel=true;
+ $("audition").onclick=()=>encode(D.audition(),30,style,"Fireflies - Sound Reference.mp4").catch(e=>msg(e.message));
+ $("test").onclick=()=>encode(D.SCENES,30,style,"Command Loom - 03 Fireflies - TEST 30s.mp4").catch(e=>msg(e.message));
+ $("full").onclick=()=>encode(D.SCENES,D.total,style,"Command Loom - 03 Fireflies.mp4").catch(e=>msg(e.message));
+ $("still").onclick=()=>canvas.toBlob(b=>save(b,"Fireflies - "+R.sc.id+".png"),"image/png");
+ draw(0);msg("Ready · "+D.total.toFixed(2)+" s · "+Math.round(D.total*30)+" frames.");
+ window.__app={D,P,R,renderer,draw,encode};
+ if(batch){
+  document.body.classList.add("batch");
+  for(let i=0;i<D.SCENES.length;i++){const sc=D.SCENES[i];draw(sc.start+sc.dur/2);await artifact("control_"+i+"_"+sc.id+".png",await new Promise(r=>canvas.toBlob(r,"image/png")));}
+  for(let t=0;t<D.total;t+=5){draw(t);await artifact("timeline_"+String(t).padStart(3,"0")+".png",await new Promise(r=>canvas.toBlob(r,"image/png")));}
+  const syn=D.SCENES.find(s=>s.id==="sync");draw(syn.start+(D.RUN.main.stableFrom-syn.from)/syn.rate);await artifact("money_sync.png",await new Promise(r=>canvas.toBlob(r,"image/png")));
+  const cmp=D.SCENES.find(s=>s.id==="compare_sync");draw(cmp.start+(D.RUN.main.stableFrom-cmp.from)/cmp.rate);await artifact("comparison_proof.png",await new Promise(r=>canvas.toBlob(r,"image/png")));
+  draw(D.SCENES.find(s=>s.id==="intro").start+.3);await artifact("intro_close.png",await new Promise(r=>canvas.toBlob(r,"image/png")));
+  draw(.3);await artifact("hook_flash_1.png",await new Promise(r=>canvas.toBlob(r,"image/png")));
+  draw(2.3);await artifact("hook_flash_2.png",await new Promise(r=>canvas.toBlob(r,"image/png")));
+  if(batch==="controls"){await artifact("progress.json",new Blob([JSON.stringify({stage:"controls_done",total:D.total})]));return;}
+  const all=[await encode(D.SCENES,30,"glass","Command Loom - 03 Fireflies - AFTERGLOW TEST 30s.mp4",true)];
+  const steady=D.SCENES.filter(s=>["sync","close"].includes(s.id));all.push(await encode(D.SCENES,15,"glass","Fireflies - AFTERGLOW Sync QA 15s.mp4",true,steady.map(s=>[s.start,s.end])));
+  await artifact("progress.json",new Blob([JSON.stringify({stage:"done",total:D.total,reports:all})]));return;
+ }
+ function loop(now){if(playing&&!busy&&last){time=Math.min(D.total-1/30,time+(now-last)/1000);draw(time);if(time>=D.total-1/30){playing=false;stopAudio();}}last=now;requestAnimationFrame(loop);}requestAnimationFrame(loop);
+}catch(e){msg("Error: "+e.stack);if(batch)await artifact("progress.json",new Blob([JSON.stringify({stage:"error",message:e.stack})]));}
+})();
+</script></body></html>
