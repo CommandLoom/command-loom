@@ -1,0 +1,29 @@
+{
+  "source": "USGS ANSS Comprehensive Earthquake Catalog (ComCat), FDSN event web service",
+  "query": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2025-01-01T00:00:00Z&endtime=2026-01-01T00:00:00Z&minmagnitude=4.5&eventtype=earthquake&orderby=time-asc",
+  "downloaded_utc": "2026-10-16T00:56:54Z",
+  "sha256_raw": "d8ac8d3a29aea307c02aa53841d890b489c7106402a952c33f85888cfc90f6e9",
+  "features": 8556,
+  "located": 8556,
+  "unlocated": [],
+  "largest": {
+    "id": "us6000qw60",
+    "time_utc": "2025-07-29T23:24:52.483000+00:00",
+    "mag": 8.8,
+    "magType": "mww",
+    "place": "2025 Kamchatka Peninsula, Russia Earthquake",
+    "depth_km": 35
+  },
+  "busiest_utc_day": {
+    "day": "2025-07-30",
+    "events": 422
+  },
+  "counts": {
+    "M≥5": 2128,
+    "M≥6": 145,
+    "M≥7": 16,
+    "M≥8": 1
+  },
+  "land": "Natural Earth 1:110m land (public domain)",
+  "land_sha256": "9e0729ee253ca7d7a5c4ae9395fb1902264c5377c52e224d13dd85010e2835d9"
+}
