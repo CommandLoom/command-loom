@@ -49,4 +49,4 @@ node engine/test_quakes.js
 | `Earthquakes.html` | Preview and export page. |
 | `start.bat` | Windows launcher. |
 
-Libraries (in `vendor/`): [mp4-muxer 5.1.3](https://github.com/Vanilagy/mp4-muxer).
+Libraries (in `vendor/`): [mp4-muxer 5.1.3](https://github.com/Vanilagy/mp4-muxer) (three.js r128 is included for the shared page but not used here).
