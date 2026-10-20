@@ -78,8 +78,10 @@
   // ---------- full video ----------
   const YEAR_RATE = 4 * DAY;                     // data ms per video second in the chronological year
   const S = [{ id: "hook", t0: 0, t1: 3 }, { id: "intro", t0: 3, t1: 7 }, { id: "year", t0: 7, t1: 7 + 365 / 4 }];
-  S.push({ id: "big", t0: S[2].t1, t1: S[2].t1 + 24 }, { id: "sum", t0: S[2].t1 + 24, t1: S[2].t1 + 36 }, { id: "close", t0: S[2].t1 + 36, t1: S[2].t1 + 44 });
-  const FULL_DUR = Math.round(S[5].t1 * 30) / 30;
+  const HOLD = 2;                                // the year's last frame stays on screen so the final count can be read
+  S.push({ id: "hold", t0: S[2].t1, t1: S[2].t1 + HOLD });
+  S.push({ id: "big", t0: S[3].t1, t1: S[3].t1 + 24 }, { id: "sum", t0: S[3].t1 + 24, t1: S[3].t1 + 36 }, { id: "close", t0: S[3].t1 + 36, t1: S[3].t1 + 44 });
+  const FULL_DUR = Math.round(S[6].t1 * 30) / 30;
   const BIG_FROM = Date.UTC(2025, 6, 29, 12), BIG_RATE = 2 * 3600000;    // replay 29 Jul 12:00 → 31 Jul 12:00 UTC at 2 hours per second
   const sceneAt = (t) => S.find((s) => t < s.t1) || S[S.length - 1];
   const viewMain = (t) => ({ cx: 640, cy: 570, R: 440, k: 1, lon: 150 + 75 * Math.sin(2 * Math.PI * t / 70), lat: 12 });
@@ -97,13 +99,14 @@
       D.text(ctx, N.toLocaleString("en-US") + " earthquakes. One year.", W / 2, 90, 72, C.text, 700); D.text(ctx, "All of 2025 at once · USGS catalog, M4.5+", W / 2, 152, 32, "#FFBD38", 600); return;
     }
     if (sc.id === "intro") { const v = viewMain(0); globe(ctx, v); legend(ctx, 1200, 740); D.lines(ctx, ["Every M4.5+ earthquake of 2025,", "as recorded by USGS."], W / 2, 90, 60, C.text, D.fade(t, sc.t0, sc.t1)); D.text(ctx, "Now, one day at a time.", 1200, 300, 40, C.dim, 600, "left", D.fade(t, 4.2, 7)); return; }
-    if (sc.id === "year") {
-      const dt = T0 + (t - sc.t0) * YEAR_RATE, v = viewMain(t - sc.t0); globe(ctx, v); const n = quakes(ctx, v, dt, YEAR_RATE); panel(ctx, dt, n, YEAR_RATE, "UTC · 4 days per second");
+    if (sc.id === "year" || sc.id === "hold") {
+      const y = S[2], dt = sc.id === "hold" ? T1 - 1 : T0 + (t - sc.t0) * YEAR_RATE, v = viewMain(sc.id === "hold" ? y.t1 - y.t0 : t - sc.t0); globe(ctx, v); const n = quakes(ctx, v, dt, YEAR_RATE); panel(ctx, dt, n, YEAR_RATE, "UTC · 4 days per second");
       // M7+ labels, measured from the catalog
       for (const e of EV) { if (e[4] < 7) continue; const age = (dt - e[0]) / YEAR_RATE; if (age < 0 || age > 3) continue; const p = proj(v, e[1], e[2]);
         const a = D.clamp(Math.min(age / .2, (3 - age) / .5)); const s = "M" + e[4].toFixed(1) + " · " + e[7].replace(/^\d+ km [NSEW]+ of /, ""); D.text(ctx, s, 640, 1040, 30, "#FFBD38", 600, "center", a);
         if (p[2] > 0) { ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = "#FFBD38"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p[0], p[1], 26 + 30 * (1 - D.clamp(age)), 0, 7); ctx.stroke(); ctx.restore(); } break; }
-      D.speed(ctx, "4 DAYS PER SECOND", W); return;
+      if (sc.id === "hold") D.text(ctx, "End of 2025", 1200, 170, 34, "#FFBD38", 700, "left", D.clamp((t - sc.t0) / .3));
+      D.speed(ctx, sc.id === "hold" ? "END OF THE YEAR" : "4 DAYS PER SECOND", W); return;
     }
     if (sc.id === "big") {
       const u = t - sc.t0, dt = BIG_FROM + u * BIG_RATE, z = 1 + 2.6 * D.smooth(u / 4), v = { cx: 640, cy: 570, R: 440 * z, k: 1, lon: 150 + (BIG[1] - 150) * D.smooth(u / 4), lat: 12 + (BIG[2] - 12) * D.smooth(u / 4) };
@@ -118,7 +121,7 @@
       D.lines(ctx, ["The largest of the year."], W / 2, 90, 64, C.text, D.fade(u, 0, 6)); return;
     }
     // summary and close: the whole year on the flat map
-    const f = D.fade(t, sc.t0, sc.t1), u = t - S[4].t0, z = 1 + .06 * u / 20;      // slow zoom across summary + close
+    const f = D.fade(t, sc.t0, sc.t1), u = t - S[5].t0, z = 1 + .06 * u / 20;      // slow zoom across summary + close
     ctx.save(); ctx.translate(960, 610); ctx.scale(z, z); ctx.translate(-960, -610);
     flat(ctx, 160, 210, 1600, 800, T1, YEAR_RATE, 2);
     // summary steps: M6+, then M7+, then the M8.8 ringed on the map (all from the catalog)

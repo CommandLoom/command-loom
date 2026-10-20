@@ -2,7 +2,7 @@
 
 Every earthquake of magnitude 4.5 or more that the USGS catalog recorded in 2025 (8,556 events), one day at a time on a turning globe, then the largest of the year (M8.8, Kamchatka, 29 July) and its aftershocks.
 
-This is a **data visualization**, not a simulation: every dot is a real catalog event at its reported time and place. This folder renders the whole video (2:22, 1920×1080, 30 fps, with sound) and its three Shorts in your browser, frame by frame.
+This is a **data visualization**, not a simulation: every dot is a real catalog event at its reported time and place. This folder renders the whole video (2:24, 1920×1080, 30 fps, with sound) and its three Shorts in your browser, frame by frame.
 
 ## Run it
 
