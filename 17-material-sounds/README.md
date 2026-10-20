@@ -1,8 +1,8 @@
 # 17 · Material Sounds
 
-The same ball dropped on the same spike in six materials: glass, crystal, wood, metal, jelly and water. Every sound is one collision from the simulation. Which one sounds best?
+Five balls, dropped one after another onto the same steel spike, in six materials: glass shatters, crystal breaks into big pieces, wood splits, metal bounces, jelly sticks and slides off, water splashes. Every sound is one collision.
 
-This folder renders the whole video (1:40, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
+This folder renders the whole video (1:32, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
 ## Run it
 
@@ -13,16 +13,15 @@ You need **Python 3** (a tiny local web server) and **Chrome or Edge** (WebCodec
 
 ## The model
 
-`engine/materials.js`:
+`engine/materials.js`: side-view simulation (centimetres, g = 981 cm/s², step 1/1200 s). Pieces are circles that collide with the spike's two sides, the tray floor and walls, and the table around the tray; pieces do not collide with each other.
 
-- Side-view (2D) simulation in centimetres with g = 981 cm/s², time step 1/1200 s. A 6 cm ball is released with its centre 40 cm above the tray floor and falls onto a spike 10 cm tall (two straight sides) inside a tray with 9 cm walls.
-- Pieces are circles that collide with the spike, floor and walls; there is no piece-to-piece contact. Each collision reflects the normal speed times the material's bounciness and reduces the sliding speed by its friction.
-- Brittle materials break on first touching the spike into pieces with random sizes and burst speeds from a fixed seed: glass 170 pieces, crystal 34, wood two halves and 26 splinters, water 320 drops. Metal stays whole and bounces. Jelly is a simplified soft body: it sticks to the spike and wobbles.
-- Every collision faster than 25 cm/s is recorded. The 3D view (three.js) places each piece at its simulated position, with a small fixed depth offset for depth.
+- Five 6 cm balls released 1.1 s apart, 40 cm above the tray floor, at slightly different sideways offsets; every ball reaches the spike.
+- Material model: bounciness, sliding friction, and for brittle materials the number and size of pieces (glass 170, crystal 34, wood two halves and 26 splinters, water 320 drops), with seeded burst speeds. Jelly sticks to the spike, wobbles, and slides off after 0.9 s.
+- Collisions per 6-second run: glass 3,093, crystal 655, wood 328, metal 36, water 2,136.
 
 ## What is measured, what is display
 
-Computed (checked by `engine/test_materials.js`): every piece's path; that all six balls touch the spike at the same moment (0.734 s); which materials break; that nothing in play leaves the tray; that the same seed gives the same run; the collision counts (glass 574, crystal 130, wood 62, metal 7, water 365). Display only: materials, lighting and camera; the depth offsets of pieces. Sound is synthesized: one note per recorded collision in the material's voice (glass, bell, wood, metal, plop; at most four per frame, pitch from piece size), plus jelly's wobbles; in slow motion the sound keeps its real pitch.
+Computed (checked by `engine/test_materials.js`): every path and collision; nothing passes through the floor or table. Display: three.js rendering, depth spread of the pieces, the 2.5× slow motion (labelled). Sound is synthesized: one sound per recorded collision (at most four per frame) in the material's voice, pitch from piece size; jelly's hits and wobbles.
 
 ## Tests
 

@@ -18,9 +18,12 @@ V.ready.then(() => {
     for (let y = 0; y < m.H; y++) for (let x = 1; x < m.W / 2; x++) diff += Math.abs(m.u[y * m.W + x] - m.u[y * m.W + (m.W - x)]); ok(diff / (m.W * m.H / 2) < .01, "not mirrored " + diff); });
   test("many broken waves: the dish stays full of spirals to the end", () => { for (const k of ["many", "s2"]) ok(T[k].active[T[k].frames] > .15 && T[k].fire.every((f) => f.length >= 10), k + " " + T[k].active[T[k].frames]); });
   test("rebuilding a frame from the stored copies gives exactly the computed frame", () => { const tr = T.many, a = V.state(tr, 437).u.slice(); V.state(tr, 10); const b = V.state(tr, 437).u; ok(a.every((x, i) => x === b[i]), "differs"); });
-  test("timelines: whole frames, Shorts 30–40 s, sound inside and before the end fade", () => {
+  test("rain of drops: the dish is never quiet during the rings scene", () => { const a = T.rings.active; for (let f = 1; f < a.length; f++) ok(a[f] > 0, "quiet at " + f); console.log("    " + Object.keys(V.DROPS).length + " drops"); });
+  test("timelines: whole frames, Shorts 30–40 s, events inside, no gap in the sound longer than 1.5 s", () => {
     for (const tl of V.timelines) { ok(Math.abs(tl.dur * 30 - Math.round(tl.dur * 30)) < 1e-9, tl.id); if (tl.id !== "full") ok(tl.dur >= 30 && tl.dur <= 40, tl.id);
-      const ev = tl.events(); ok(ev.length && ev.every((e) => e.t >= 0 && e.t < tl.dur - .5), tl.id + " events"); }
+      const ev = tl.events(), ts = ev.map((e) => e.t).sort((a, b) => a - b); ok(ev.length && ev.every((e) => e.t >= 0 && e.t < tl.dur - .5), tl.id + " events");
+      let gap = ts[0]; for (let i = 1; i < ts.length; i++) gap = Math.max(gap, ts[i] - ts[i - 1]); console.log("    " + tl.id + ": " + ev.length + " notes, longest gap " + gap.toFixed(2) + " s, last note " + ts[ts.length - 1].toFixed(2));
+      ok(gap < 1.5, tl.id + " gap " + gap); }
     for (let i = 1; i < V.S.length; i++) ok(V.S[i].t0 === V.S[i - 1].t1, "contiguous");
     ok(T.spiral.frames - 120 >= Math.round((V.S[3].t1 - V.S[3].t0) * 30), "hook frames");
   });

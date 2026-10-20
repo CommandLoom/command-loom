@@ -1,6 +1,6 @@
 # 11 · Brachistochrone
 
-Four frictionless beads slide from A to B on four tracks. The straight line is the shortest and comes last; the cycloid wins by dropping steeply first and even dipping below the finish. Flipped into a bowl, the same curve makes beads from any height arrive together.
+Frictionless beads race from A to B. The straight line is the shortest and comes last; the cycloid wins every race. Twelve curves race at once and their times form a valley with the cycloid at the bottom; flipped into a bowl, the cycloid makes beads from any height arrive together.
 
 This folder renders the whole video (1:40, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
@@ -13,17 +13,16 @@ You need **Python 3** (a tiny local web server) and **Chrome or Edge** (WebCodec
 
 ## The model
 
-`engine/brach.js`: a bead starting at rest at depth 0 has speed v = √(2 g y) at depth y (energy conservation, no friction, g = 9.81 m/s²). Each track is cut into 4,000 short straight pieces; on a piece from depth y₁ to y₂ with length L the bead accelerates uniformly and takes 2L / (v₁ + v₂).
+`engine/brach.js`: a bead starting at rest has speed v = √(2 g y) at depth y (energy conservation, no friction, g = 9.81 m/s²). Each track is cut into 4,000 short straight pieces; on a piece from depth y₁ to y₂ with length L the bead takes 2L / (v₁ + v₂).
 
-- A to B: 2 m across, 0.8 m down.
-- Times: cycloid 0.818 s (matches the exact θ√(R/g)), circular arc 0.847 s, steep drop then slide 0.902 s, straight line 1.087 s (matches √(2L²/(g h))).
-- The cycloid dips about 10 cm below B.
-- Tautochrone: in a cycloid bowl with R = 0.5 m, beads released from three heights all reach the bottom after π√(R/g) = 0.709 s.
+- Race 1, B = (2 m, 1 m): cycloid 0.806 s, circular arc 0.830 s, steep drop then slide 0.892 s, straight line 1.010 s. Race 2 (2.4 m, 0.6 m): 0.938 / 0.979 / 1.050 / 1.442 s. Race 3 (1.4 m, 1.2 m): cycloid 0.678 s, arc 0.691 s, straight line 0.760 s, steep drop 0.766 s.
+- Twelve curves: y = line + s × (cycloid − line) for s from 0 to 2.7 on an x grid packed near A. Times fall all the way to s = 1 and rise past it (1.010 → 0.806 → 0.908 s for B = (2, 1)).
+- Tautochrone: in a cycloid bowl the motion along the arc is exactly simple harmonic, so every release height reaches the bottom after π√(R/g) = 0.709 s (R = 0.5 m). New beads join one full swing later, at rest, so the bowl goes from 3 to 6 to 12 beads.
 - History: Johann Bernoulli posed the problem in June 1696; Newton, Leibniz, Jakob Bernoulli and others solved it.
 
 ## What is measured, what is display
 
-Computed (checked by `engine/test_brach.js`): every time, speed curve and result, the 10 cm dip, and the equal tautochrone times. Display only: the 12× (long video) and 15× (Shorts) slow motion, which is labelled on screen, and colours. Sound is synthesized: soft notes at the start, at the quarter marks and at each finish.
+Computed (checked by `engine/test_brach.js`): every time and position, the cycloid matching the exact θ√(R/g), the valley of the twelve curves, and the equal bowl times. Display only: the slow motion (5× to 16×, labelled on screen), colours and the painted trail behind each bead. Sound is synthesized: each bead ticks as it moves along its track (closer ticks near A where it is slow), a bell at every finish, and a chord each time the bowl's beads meet.
 
 ## Tests
 

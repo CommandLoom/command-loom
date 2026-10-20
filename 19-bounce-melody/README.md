@@ -1,8 +1,8 @@
 # 19 · Bounce Melody
 
-A ball bounces inside a ring and every bounce plays the next note of a public-domain melody. The ball gets a little faster after each bounce, so the tune speeds up on its own while the path draws a star. Guess the song before the answer appears.
+A ball bouncing inside a ring; every bounce plays the next note of a public-domain melody, and the ball gets a little faster after each bounce, so the tune speeds up on its own. At the end each ring replays its fastest notes.
 
-This folder renders the whole video (1:40, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
+This folder renders the whole video (1:35, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
 ## Run it
 
@@ -13,15 +13,15 @@ You need **Python 3** (a tiny local web server) and **Chrome or Edge** (WebCodec
 
 ## The model
 
-`engine/ring.js`:
+`engine/ring.js`: the ball flies in straight lines and reflects off the ring (angle in = angle out), so every flight crosses the same angle of the ring: 137.5° (song 1), 144.3° (song 2), 100.7° (song 3).
 
-- The ball moves in straight lines and reflects off the ring (angle in = angle out), so every flight crosses the same angle of the ring: 137.5° (song 1), 144.3° (song 2), 100.7° (song 3).
-- Game rule, not physics: after each bounce the ball is a fixed percentage faster, chosen so each song lasts its planned time (2.6%, 2.8% and 3.8% per bounce in the long video).
-- One note per bounce: In the Hall of the Mountain King (Grieg, 1875; 104 notes), Ode to Joy (Beethoven, 1824; 62 notes), Für Elise (Beethoven, 1810; 35 notes).
+- Game rule, not physics: after each bounce the ball is a fixed percentage faster, chosen so each song lasts its planned time: song 1 30.4 s (+2.28% per bounce, gaps from 0.75 s to 0.073 s), song 2 26.4 s (+2.38%), song 3 20.4 s (+2.83%).
+- One note per bounce: 104, 62 and 35 notes. Melodies: Grieg (1875), Beethoven (1824 and 1810), all public domain.
+- Close: each ring replays the last 2.4 seconds of its own song, one after the other.
 
 ## What is measured, what is display
 
-Computed (checked by `engine/test_melody.js`): every bounce position and time; one bounce per note; equal angles in and out at every bounce; each gap shorter than the one before; the song lengths. Display only: colours, ripples, line widths, the camera push. Sound is synthesized: a marimba note per bounce at the melody's pitch and a soft bell when the answer appears.
+Computed (checked by `engine/test_melody.js`): every bounce point, reflection and timing. Sound is synthesized: a marimba note per bounce at the melody's pitch; when the answer appears, a bell chord and the song's last three notes an octave up.
 
 ## Tests
 

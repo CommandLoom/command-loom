@@ -30,6 +30,13 @@
   // tautochrone: a cycloid bowl; released at rest from any point, a bead reaches the bottom after π√(R/g)
   const tautoTime = (R) => Math.PI * Math.sqrt(R / g);
   function bowlFrom(R, th0) { const pts = []; for (let i = 0; i <= M; i++) { const a = th0 + (Math.PI - th0) * i / M; pts.push([R * (a - Math.sin(a)), R * (1 - Math.cos(a))]); } const y0 = pts[0][1]; return pts.map(([x, y]) => [x, y - y0]); }
-  const api = { g, track, at, straight, arc, cycloid, cycloidFit, dropThenSlide, tautoTime, bowlFrom };
+  // a family of curves between the straight line (s = 0) and the cycloid (s = 1) and beyond it (s > 1, deeper):
+  // y_s(x) = y_line(x) + s · (y_cycloid(x) − y_line(x)), on an x grid packed near A where the cycloid starts vertically
+  function cycY(B, x) { const { th, R } = cycloidFit(B); let lo = 0, hi = th; for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if (R * (m - Math.sin(m)) < x) lo = m; else hi = m; } const a = (lo + hi) / 2; return R * (1 - Math.cos(a)); }
+  function fan(B, s) { const out = []; for (let i = 0; i <= M; i++) { const x = B[0] * Math.pow(i / M, 3), yl = B[1] * x / B[0]; out.push([x, i === M ? B[1] : yl + s * (cycY(B, x) - yl)]); } return out; }
+  // tautochrone bowl x(θ) = R(θ − sin θ) − πR, height above the bottom R(1 + cos θ); arc length from the bottom s = 4R cos(θ/2).
+  // Along that arc length the motion is exactly simple harmonic, s(t) = s0 cos(t √(g / 4R)), so every release height reaches the bottom after π√(R/g).
+  function bowlAt(R, s0, t) { const s = s0 * Math.cos(t * Math.sqrt(g / (4 * R))), th = 2 * Math.acos(Math.max(-1, Math.min(1, s / (4 * R)))); return { x: R * (th - Math.sin(th)) - Math.PI * R, h: R * (1 + Math.cos(th)), s }; }
+  const api = { g, track, at, straight, arc, cycloid, cycloidFit, dropThenSlide, tautoTime, bowlFrom, fan, bowlAt };
   root.Brach = api; if (typeof module !== "undefined") module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

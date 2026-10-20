@@ -1,6 +1,6 @@
 # 13 · Fourier Circles
 
-A circle on the rim of a spinning circle, another on its rim, and so on. Each turns a whole number of times per lap, and the pen at the end draws a heart, a star, or the Command Loom chevron.
+Circles on the rims of circles, each turning a whole number of times per lap. Added one by one they draw a heart; then a star, a flower, an infinity sign and the channel's logo, faster and faster.
 
 This folder renders the whole video (1:40, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
@@ -13,16 +13,15 @@ You need **Python 3** (a tiny local web server) and **Chrome or Edge** (WebCodec
 
 ## The maths
 
-`engine/fourier.js`:
+`engine/fourier.js`: each shape is resampled to 256 points along its length, and a discrete Fourier transform turns them into 256 circles (radius |c_k|, k turns per lap, starting angle arg c_k), sorted from largest to smallest. Using all 256 reproduces every point exactly.
 
-- Each closed shape is resampled to 256 points equally spaced along its outline, treated as complex numbers z_n.
-- Discrete Fourier transform: c_k = (1/256) Σ z_n e^(−2πi k n / 256) for k = −128 … 127. Circle k has radius |c_k|, turns k times per lap and starts at angle arg c_k. Chained tip to tail, the last tip traces the shape; all 256 circles reproduce every sample point exactly.
-- Circles are drawn largest first. The heart's average miss, as a share of its height: 10.2 % (1 circle), 8.8 % (2), 5.6 % (4), 2.0 % (8), 0.5 % (16), 0.2 % (32), 0.05 % (64).
-- Shapes: the heart curve x = 16 sin³t, y = 13 cos t − 5 cos 2t − 2 cos 3t − cos 4t (a well-known parametric heart), a five-pointed star, and the channel's chevron.
+- Heart, average miss as a share of its height: 1 circle 10.2%, 2 circles 8.8%, 4 circles 5.6%, 8 circles 2.0%, 16 circles 0.54%, 32 circles 0.17%, 64 circles 0.05%.
+- Star (64 circles) 0.009%, flower (32) 0.026%, infinity (32, the lemniscate of Gerono) 0.033%, logo (128) 0.025%, measured at the sample points.
+- The drawing speeds up lap after lap; the circles' speeds stay whole numbers per lap.
 
 ## What is measured, what is display
 
-Computed (checked by `engine/test_fourier.js`): every circle's size, speed and phase; the exact reconstruction with 256 circles; every miss percentage. Display only: colours, line widths and how many laps are shown. Sound is synthesized: a soft note every 1/16 of a lap, pitch following the pen's height.
+Computed (checked by `engine/test_fourier.js`): every circle, every miss, and the lap clock. Display only: colours, the glowing trail and the speed-up. Sound is synthesized: the pen plays a note 16 times per lap (fewer when laps get fast), higher when the pen is higher, and a bell each time a lap closes.
 
 ## Tests
 

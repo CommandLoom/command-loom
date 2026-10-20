@@ -1,118 +1,98 @@
-// 08 Turing Patterns: every frame is the Gray–Scott simulation (rd.js) at that step; nothing is painted.
+// 08 Turing Patterns: one dot grows and splits until the screen is full of spots, then the same two rules grow stripes, a maze
+// and holes, each from one dot, full screen (rd.js). Every frame is the simulation; nothing is painted. Every note is the pattern growing.
 (function (root) {
   "use strict";
-  const RD = root.RD, D = root.CLDraw;
-  const C = { bg: "#06080D", text: "#F5F3EF", dim: "#9AA6B8", amber: "#FFBD38", cyan: "#35C4F0" };
-  // colour map for V (0 … 0.4): night blue → teal → amber → cream
-  const STOPS = [[0, [8, 12, 24]], [.12, [18, 70, 96]], [.22, [53, 196, 240]], [.30, [255, 189, 56]], [.40, [255, 246, 222]]];
-  const LUT = new Uint8Array(256 * 3);
-  for (let i = 0; i < 256; i++) { const v = i / 255 * .4; let j = 0; while (j < STOPS.length - 2 && v > STOPS[j + 1][0]) j++; const [a, ca] = STOPS[j], [b, cb] = STOPS[j + 1], u = D.clamp((v - a) / (b - a));
-    for (let c = 0; c < 3; c++) LUT[i * 3 + c] = Math.round(ca[c] + (cb[c] - ca[c]) * u); }
-  const PATTERNS = { spots: [.0367, .0649, "spots that split"], stripes: [.029, .057, "stripes"], maze: [.0545, .062, "labyrinth"], holes: [.039, .058, "holes"] };
+  const RD = root.RD, D = root.CLDraw, FPS = 30;
+  const C = { bg: "#05060B", text: "#F5F3EF", dim: "#9AA6B8", amber: "#FFBD38" };
+  // [feed, kill, name, colour stops for V from 0 to 0.4]
+  const P = {
+    spots:   [.0367, .0649, "spots that split", [[0, [10, 6, 30]], [.14, [120, 20, 110]], [.24, [255, 80, 120]], [.32, [255, 170, 60]], [.40, [255, 245, 200]]]],
+    stripes: [.029, .057, "stripes", [[0, [4, 10, 22]], [.12, [20, 80, 120]], [.22, [60, 200, 230]], [.32, [220, 250, 255]], [.40, [255, 255, 255]]]],
+    maze:    [.0545, .062, "a maze", [[0, [14, 4, 28]], [.12, [80, 20, 140]], [.22, [180, 60, 255]], [.30, [120, 220, 255]], [.40, [240, 255, 255]]]],
+    holes:   [.039, .058, "rings", [[0, [4, 18, 10]], [.14, [20, 90, 40]], [.24, [110, 220, 60]], [.32, [230, 255, 90]], [.40, [255, 255, 220]]]]
+  };
+  const LUTS = {};
+  for (const [key, [, , , stops]] of Object.entries(P)) { const L = new Uint8Array(256 * 3);
+    for (let i = 0; i < 256; i++) { const v = i / 255 * .4; let j = 0; while (j < stops.length - 2 && v > stops[j + 1][0]) j++; const [a, ca] = stops[j], [b, cb] = stops[j + 1], u = D.clamp((v - a) / (b - a));
+      for (let c = 0; c < 3; c++) L[i * 3 + c] = Math.round(ca[c] + (cb[c] - ca[c]) * u); }
+    LUTS[key] = L; }
+  const GW = 320, GH = 180, VW = 180, VH = 320;
   // a runner keeps one simulation and steps it to whatever step count a frame needs (restarts if asked to go back)
   function runner(make) { let sim = null; return (steps) => { if (!sim || sim.steps > steps) sim = make(); sim.step(steps - sim.steps); return sim; }; }
+  const make = (key, W, H, seed) => () => new RD.Sim(W, H, P[key][0], P[key][1], seed, 4);
   const cvs = {};
-  function paint(ctx, sim, x, y, size, key, alpha = 1) {
-    const n = sim.n, c = cvs[key + n] || (cvs[key + n] = document.createElement("canvas")); c.width = n; c.height = n;
-    const g = c.getContext("2d"), img = g.createImageData(n, n), px = img.data, V = sim.V;
-    for (let i = 0; i < n * n; i++) { const q = Math.min(255, Math.max(0, Math.round(V[i] / .4 * 255))) * 3; px[i * 4] = LUT[q]; px[i * 4 + 1] = LUT[q + 1]; px[i * 4 + 2] = LUT[q + 2]; px[i * 4 + 3] = 255; }
-    g.putImageData(img, 0, 0); ctx.save(); ctx.globalAlpha = alpha; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"; ctx.drawImage(c, x, y, size, size); ctx.restore();
-    ctx.strokeStyle = "rgba(160,176,198,.35)"; ctx.lineWidth = 2; ctx.strokeRect(x, y, size, size);
+  function paint(ctx, sim, key, x, y, w, h) {
+    const W = sim.W, H = sim.H, id = key + W + "x" + H, c = cvs[id] || (cvs[id] = document.createElement("canvas")); c.width = W; c.height = H;
+    const g = c.getContext("2d"), img = g.createImageData(W, H), px = img.data, V = sim.V, L = LUTS[key];
+    for (let i = 0; i < W * H; i++) { const q = Math.min(255, Math.max(0, Math.round(V[i] / .4 * 255))) * 3; px[i * 4] = L[q]; px[i * 4 + 1] = L[q + 1]; px[i * 4 + 2] = L[q + 2]; px[i * 4 + 3] = 255; }
+    g.putImageData(img, 0, 0); ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"; ctx.drawImage(c, x, y, w, h); ctx.restore();
   }
-  const FPS = 30;
+  function zoomWrap(inner, W, H, zf) { return (ctx, t) => { const z = zf(t); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H); ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2); inner(ctx, t); ctx.restore(); }; }
 
   // ---------- long video ----------
-  const S = [["hook", 0, 4], ["rules", 4, 18], ["grow", 18, 54], ["four", 54, 82], ["turing", 82, 96], ["close", 96, 104]].map(([id, t0, t1]) => ({ id, t0, t1 }));
+  // scene: [id, start, end, pattern, steps per frame]
+  const S = [["hook", 0, 4, "spots", 0], ["spots", 4, 37, "spots", 23], ["stripes", 37, 51.5, "stripes", 13], ["maze", 51.5, 69, "maze", 26], ["holes", 69, 84, "holes", 12], ["all", 84, 100, null, 0]]
+    .map(([id, t0, t1, key, rate]) => ({ id, t0, t1, key, rate }));
   const sceneAt = (t) => S.find((s) => t < s.t1) || S[S.length - 1];
-  const GROW_N = 192, GROW_RATE = 13, PANEL_N = 128, PANEL_RATE = 12;
-  const growAt = runner(() => new RD.Sim(GROW_N, PATTERNS.spots[0], PATTERNS.spots[1], 3, .06));
-  const panelRun = Object.fromEntries(Object.entries(PATTERNS).map(([key, [F, k]], i) => [key, runner(() => new RD.Sim(PANEL_N, F, k, 11 + i, .1))]));
-  const growSteps = (t) => Math.max(0, Math.round((t - S[2].t0) * FPS) * GROW_RATE);
-  const panelSteps = (t) => Math.max(0, Math.round((t - S[3].t0) * FPS) * PANEL_RATE);
-  const PANEL_END = Math.round((S[3].t1 - S[3].t0) * FPS) * PANEL_RATE;
-  function fourPanels(ctx, t, x0, y0, size, gap, cols, k = 1, steps) {
-    Object.entries(PATTERNS).forEach(([key, [F, kk, name]], i) => { const x = x0 + (i % cols) * (size + gap), y = y0 + Math.floor(i / cols) * (size + gap);
-      paint(ctx, panelRun[key](steps), x, y, size, "p" + key);
-      D.text(ctx, name, x + size / 2, y + size + 30 * k, 32 * k, C.text, 700); D.text(ctx, "feed " + F + " · kill " + kk, x + size / 2, y + size + 64 * k, 22 * k, C.dim, 600); });
+  const RUN = Object.fromEntries(Object.keys(P).map((k, i) => [k, runner(make(k, GW, GH, 3 + i))]));
+  const QUAD = Object.fromEntries(Object.keys(P).map((k, i) => [k, runner(make(k, GW, GH, 21 + i))]));
+  const steps = (sc, t) => Math.max(0, Math.round((t - sc.t0 - .3) * FPS)) * sc.rate;
+  const SPOTS_END = Math.round((S[1].t1 - S[1].t0 - .3) * FPS) * S[1].rate;
+  const QUAD_RATE = { spots: 40, stripes: 9, maze: 18, holes: 9 };
+  function inner(ctx, t) {
+    const W = 1920, H = 1080, sc = sceneAt(t), u = t - sc.t0, f = D.fade(t, sc.t0, sc.t1);
+    if (sc.id === "hook") { const sim = RUN.spots(SPOTS_END); paint(ctx, sim, "spots", 0, 0, W, H); D.topShade(ctx, W, 220);
+      D.text(ctx, "It starts as one dot.", W / 2, 90, 72, C.text, 700); D.text(ctx, sim.blobs() + " spots", 1840, 1020, 54, C.amber, 700, "right"); return; }
+    if (sc.id === "all") {
+      Object.keys(P).forEach((k, i) => { const x = (i % 2) * W / 2, y = Math.floor(i / 2) * H / 2, sim = QUAD[k](Math.max(0, Math.round(u * FPS)) * QUAD_RATE[k]);
+        paint(ctx, sim, k, x, y, W / 2, H / 2); D.text(ctx, P[k][2], x + W / 4, y + H / 2 - 40, 38, C.text, 700, "center", f); });
+      ctx.fillStyle = C.bg; ctx.fillRect(W / 2 - 3, 0, 6, H); ctx.fillRect(0, H / 2 - 3, W, 6);
+      D.text(ctx, "Same two rules. Four patterns.", W / 2, 70, 56, C.text, 700, "center", D.fade(u, 0, 14)); return; }
+    const sim = RUN[sc.key](steps(sc, t)); paint(ctx, sim, sc.key, 0, 0, W, H);
+    if (sc.id === "spots") { const n = sim.blobs(); D.text(ctx, n.toLocaleString("en-US"), 1840, 120, 110, C.amber, 700, "right"); D.text(ctx, n === 1 ? "spot" : "spots", 1840, 200, 40, C.text, 600, "right");
+      D.text(ctx, "One dot. It grows, stretches and splits.", W / 2, 80, 56, C.text, 700, "center", D.clamp(1 - Math.max(0, u - 6) / .8)); }
+    else D.text(ctx, "Change two numbers: " + P[sc.key][2] + ".", W / 2, 80, 56, C.text, 700, "center", D.clamp(1 - Math.max(0, u - 5) / .8) * f);
+    D.text(ctx, "Gray–Scott reaction–diffusion · feed " + P[sc.key][0] + " · kill " + P[sc.key][1] + " · computed, not painted", W / 2, 1052, 22, C.dim, 500, "center", f);
   }
-  function drawFull(ctx, t) {
-    const W = 1920, H = 1080, sc = sceneAt(t), u = t - sc.t0, f = D.fade(t, sc.t0, sc.t1); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
-    const big = 860, bx = 120, by = 150;
-    if (sc.id === "hook") {
-      const z = 1 + .04 * u / 4, s = 940 * z; paint(ctx, panelRun.maze(PANEL_END), 960 - s / 2, 560 - s / 2, s, "hook");
-      D.topShade(ctx, W, 260); D.text(ctx, "Two chemicals. No blueprint.", W / 2, 80, 64, C.text, 700); D.text(ctx, "Later in this video · Gray–Scott simulation", W / 2, 142, 30, C.amber, 600); return;
+  const drawFull = zoomWrap(inner, 1920, 1080, (t) => { const sc = sceneAt(t); return 1 + .03 * (t - sc.t0) / (sc.t1 - sc.t0); });
+
+  // ---------- sound: notes from the growth itself ----------
+  // a note each time the number of spots goes up, and a note each time the pattern reaches another 0.5% of the screen
+  // (0.15% for the spots), pitch rising as it fills. At most 8 notes a second.
+  function growthNotes(key, W, H, seed, rate, t0, frames, side = 0, gain = 1, perSec = 8) {
+    const sim = make(key, W, H, seed)(), ev = []; let lastN = sim.blobs(), lastR = 0, lastT = -1;
+    for (let fr = 1; fr <= frames; fr++) { sim.step(rate); const t = t0 + fr / FPS;
+      const n = key === "spots" ? sim.blobs() : 0, r = sim.reach();
+      if (key === "spots" && n > lastN && t - lastT >= 1 / perSec) { ev.push({ t, k: Math.min(15, Math.round(15 * Math.log(n) / Math.log(180))), side, gain: gain * .6 }); lastT = t; lastR = r; }
+      else if (r - lastR >= (key === "spots" ? .0015 : .005) && t - lastT >= 1 / perSec) { ev.push({ t, k: Math.min(15, Math.round(r * 16)), side, gain: gain * .45, voice: key === "spots" ? "marimba" : undefined }); lastT = t; lastR = r; }
+      lastN = n;
     }
-    if (sc.id === "rules" || sc.id === "grow") {
-      const sim = growAt(sc.id === "rules" ? 0 : growSteps(t)); paint(ctx, sim, bx, by, big, "grow");
-      const tx = 1100;
-      if (sc.id === "rules") {
-        const L = [["U is fed in everywhere.", C.cyan], ["V turns U into more V:  U + 2V → 3V", C.amber], ["V slowly breaks down.", C.text], ["Both spread out. U spreads twice as fast.", C.text]];
-        D.text(ctx, "The rules", tx, 210, 56, C.text, 700, "left", f);
-        L.forEach(([s, c], i) => D.text(ctx, s, tx, 320 + i * 90, 36, c, 600, "left", D.clamp((u - .8 - i * 2.4) / .5) * f));
-        D.text(ctx, "Start: a small square of V in a sea of U", tx, 760, 28, C.dim, 600, "left", D.clamp((u - 10.5) / .5) * f);
-        D.text(ctx, "That's all. Press play.", tx, 860, 44, C.text, 700, "left", D.clamp((u - 12) / .5) * f); return;
-      }
-      const n = sim.blobs(); D.text(ctx, n.toLocaleString("en-US"), tx, 360, 120, C.amber, 700, "left"); D.text(ctx, "separate spots", tx, 450, 34, C.dim, 600, "left");
-      D.text(ctx, sim.steps.toLocaleString("en-US") + " time steps", tx, 560, 44, C.text, 700, "left"); D.text(ctx, GROW_RATE + " steps per frame", tx, 610, 26, C.dim, 600, "left");
-      D.lines(ctx, [u < 12 ? "The square breaks up into spots…" : u < 26 ? "Each spot grows, stretches and splits." : "…until the whole dish is spotted."], W / 2, 70, 52, C.text, f);
-      D.text(ctx, "Gray–Scott model · feed " + PATTERNS.spots[0] + " · kill " + PATTERNS.spots[1], bx + big / 2, by + big + 34, 24, C.dim, 600, "center", f); return;
-    }
-    if (sc.id === "four") {
-      const z = 1 + .07 * u / (sc.t1 - sc.t0); ctx.save(); ctx.translate(960, 470); ctx.scale(z, z); ctx.translate(-960, -470);
-      fourPanels(ctx, t, 150, 290, 360, 60, 4, 1, panelSteps(t)); ctx.restore();
-      D.lines(ctx, ["Same two rules. Change only how fast U is fed", "and V is removed, and the pattern changes."], W / 2, 70, 48, C.text, f);
-      D.text(ctx, panelSteps(t).toLocaleString("en-US") + " time steps", W / 2, 1010, 30, C.dim, 600, "center", f); return;
-    }
-    if (sc.id === "turing" || sc.id === "close") {
-      const steps = PANEL_END + Math.round((t - S[4].t0) * FPS) * 2, key = sc.id === "turing" ? "stripes" : "spots", sim = sc.id === "turing" ? panelRun.stripes(steps) : growAt(growSteps(S[2].t1) + Math.round(u * FPS) * 4);
-      const z = 1.05 + .08 * u / (sc.t1 - sc.t0), s = 1080 * z; paint(ctx, sim, 960 - s / 2, 540 - s / 2, s, "end" + key);
-      D.topShade(ctx, W, 300);
-      if (sc.id === "turing") { D.lines(ctx, ["In 1952 Alan Turing proposed that chemicals", "which react and spread could make spots and stripes."], W / 2, 70, 48, C.text, D.clamp(u / .6) * f);
-        D.text(ctx, "In 1990 a real lab reaction showed it (the CIMA reaction).", W / 2, 1030, 34, C.amber, 600, "center", D.clamp((u - 6) / .6) * f); return; }
-      D.text(ctx, "Two chemicals. Two rules. No blueprint.", W / 2, 80, 60, C.text, 700, "center", f);
-      D.text(ctx, "Gray & Scott (1984) · Pearson (1993) · Turing (1952) · computed, not painted", W / 2, 1040, 24, C.dim, 500, "center", f);
-    }
-  }
-  // sound: one note each time the number of spots in the growing dish goes up (higher as the count grows)
-  function spotNotes(make, rate, offset, frames, maxPerSec = 8) {
-    const sim = make(), ev = []; let last = sim.blobs(), lastT = -1;
-    for (let fr = 1; fr <= frames; fr++) { sim.step(rate); const n = sim.blobs(); if (n > last) { const t = offset + fr / FPS; if (t - lastT >= 1 / maxPerSec) { ev.push({ t, k: Math.min(15, Math.round(15 * Math.log(n) / Math.log(120))), gain: .55 }); lastT = t; } } last = n; }
-    return ev;
-  }
-  const growMake = () => new RD.Sim(GROW_N, PATTERNS.spots[0], PATTERNS.spots[1], 3, .06);
+    return ev; }
   function fullEvents() {
-    const s = Object.fromEntries(S.map((x) => [x.id, x]));
-    return [{ t: .3, k: 5 }, { t: .3, k: 9 },
-      ...[0, 1, 2, 3].map((i) => ({ t: s.rules.t0 + .8 + i * 2.4, k: 4 + i * 3, gain: .6 })), { t: s.rules.t0 + 12, k: 12, gain: .6 },
-      ...spotNotes(growMake, GROW_RATE, s.grow.t0, Math.round((s.grow.t1 - s.grow.t0) * FPS) - 1),
-      ...[0, 1, 2, 3].map((i) => ({ t: s.four.t0 + .4 + i * .35, k: 3 + i * 3, gain: .6 })),
-      { t: s.turing.t0 + .3, k: 4 }, { t: s.turing.t0 + 6, k: 10 }, { t: s.close.t0 + .3, k: 6 }];
-  }
+    const ev = [{ t: .3, k: 5, gain: .6 }, { t: 1.8, k: 9, gain: .5 }, { t: 3.2, k: 12, gain: .5 }];
+    S.slice(1, 6).forEach((sc, i) => ev.push({ t: sc.t0 + .15, k: 3 + 3 * i, gain: .7, voice: "bell" }));   // a bell as each new dot is placed
+    S.slice(1, 5).forEach((sc) => ev.push(...growthNotes(sc.key, GW, GH, 3 + Object.keys(P).indexOf(sc.key), sc.rate, sc.t0 + .3, Math.round((sc.t1 - sc.t0 - .5) * FPS))));
+    Object.keys(P).forEach((k, i) => ev.push(...growthNotes(k, GW, GH, 21 + i, QUAD_RATE[k], S[5].t0, Math.round(15.3 * FPS), (i % 2 ? .5 : -.5), .6, 3)));
+    return ev; }
 
   // ---------- Shorts ----------
-  const S1_N = 160, S1_RATE = 14, S1_0 = 2.5;
-  const s1Make = () => new RD.Sim(S1_N, PATTERNS.spots[0], PATTERNS.spots[1], 5, .06), s1At = runner(s1Make);
-  const s1Steps = (t) => Math.max(0, Math.round((t - S1_0) * FPS) * S1_RATE);
-  function drawS1(ctx, t) {
-    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, 1080, 1920); const sim = s1At(s1Steps(t)); paint(ctx, sim, 40, 420, 1000, "s1");
-    D.lines(ctx, t < 16 ? ["One square.", "Two chemicals."] : ["Spots that grow", "and split."], 540, 170, 76, C.text, 1);
-    D.text(ctx, sim.blobs() + " spots", 540, 1530, 80, C.amber, 700); D.text(ctx, sim.steps.toLocaleString("en-US") + " time steps · Gray–Scott model", 540, 1610, 30, C.dim, 600);
-  }
-  const S2_RATE = 16, s2Steps = (t) => Math.max(0, Math.round((t - 1.5) * FPS) * S2_RATE);
-  function drawS2(ctx, t) {
-    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, 1080, 1920);
-    const z = 1 + .06 * t / 30; ctx.save(); ctx.translate(540, 960); ctx.scale(z, z); ctx.translate(-540, -960);
-    fourPanels(ctx, t, 70, 420, 440, 120, 2, 1.1, s2Steps(t)); ctx.restore();
-    D.lines(ctx, ["Same two rules.", "Four patterns."], 540, 170, 78, C.text, 1);
-    D.text(ctx, "only feed and kill rates change", 540, 345, 34, C.amber, 600);
-  }
+  const S1_RATE = 26, S1_0 = 1;
+  const s1Run = runner(make("spots", VW, VH, 5));
+  function s1(ctx, t) { const sim = s1Run(Math.max(0, Math.round((t - S1_0) * FPS)) * S1_RATE); paint(ctx, sim, "spots", 0, 0, 1080, 1920); D.topShade(ctx, 1080, 420);
+    const n = sim.blobs(); D.lines(ctx, ["One dot."], 540, 170, 96, C.text, 1); D.text(ctx, n + (n === 1 ? " spot" : " spots"), 540, 300, 64, C.amber, 700);
+    D.text(ctx, "Gray–Scott reaction–diffusion · computed", 540, 1860, 28, C.dim, 600); }
+  const S2 = [["stripes", 0, 7.5, 14], ["maze", 7.5, 15, 34], ["holes", 15, 22.5, 14], ["spots", 22.5, 30, 60]];
+  const s2Run = Object.fromEntries(S2.map(([k], i) => [k, runner(make(k, VW, VH, 31 + i))]));
+  function s2(ctx, t) { const sg = S2.find((x) => t < x[2]) || S2[3], [k, a, b, rate] = sg, sim = s2Run[k](Math.max(0, Math.round((t - a) * FPS)) * rate); paint(ctx, sim, k, 0, 0, 1080, 1920);
+    D.topShade(ctx, 1080, 420); D.lines(ctx, ["Same two rules."], 540, 170, 84, C.text, 1); D.text(ctx, P[k][2], 540, 290, 70, C.amber, 700, "center", D.fade(t, a, b, .2));
+    D.text(ctx, "Gray–Scott reaction–diffusion · only two numbers change", 540, 1860, 28, C.dim, 600); }
   const timelines = [
-    { id: "full", name: "08 Turing Patterns (long)", file: "Command Loom - 08 Turing Patterns.mp4", W: 1920, H: 1080, dur: 104, draw: drawFull, events: fullEvents, voice: "glass" },
-    { id: "s1", name: "Short 1 · Spots that split", file: "Command Loom - Short 1 - Spots That Split.mp4", W: 1080, H: 1920, dur: 32, draw: drawS1, voice: "glass",
-      events: () => [{ t: .3, k: 6 }, ...spotNotes(s1Make, S1_RATE, S1_0, Math.round((32 - S1_0 - .7) * FPS))] },
-    { id: "s2", name: "Short 2 · Same rules, four patterns", file: "Command Loom - Short 2 - Same Rules Four Patterns.mp4", W: 1080, H: 1920, dur: 30, draw: drawS2, voice: "glass",
-      events: () => [...[0, 1, 2, 3].map((i) => ({ t: .4 + i * .35, k: 3 + i * 3, gain: .6 })), { t: 12, k: 8, gain: .5 }, { t: 22, k: 11, gain: .5 }] }
+    { id: "full", name: "08 Turing Patterns (long)", file: "Command Loom - 08 Turing Patterns.mp4", W: 1920, H: 1080, dur: 100, draw: drawFull, events: fullEvents, voice: "glass" },
+    { id: "s1", name: "Short 1 · Spots that split", file: "Command Loom - Short 1 - Spots That Split.mp4", W: 1080, H: 1920, dur: 32, draw: zoomWrap(s1, 1080, 1920, (t) => 1 + .03 * t / 32), voice: "glass",
+      events: () => [{ t: .3, k: 6, gain: .6 }, ...growthNotes("spots", VW, VH, 5, S1_RATE, S1_0, Math.round((32 - S1_0 - .7) * FPS))] },
+    { id: "s2", name: "Short 2 · Same rules, four patterns", file: "Command Loom - Short 2 - Same Rules Four Patterns.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s2, 1080, 1920, (t) => 1 + .03 * (t % 7.5) / 7.5), voice: "glass",
+      events: () => S2.flatMap(([k, a, b, rate], i) => growthNotes(k, VW, VH, 31 + i, rate, a, Math.round((b - a - .3) * FPS))).filter((e) => e.t < 29.4) }
   ];
   root.CLVideo = { title: "Command Loom · 08 Turing Patterns", timelines };
-  root.TuringVideo = { S, PATTERNS, GROW_N, GROW_RATE, PANEL_N, PANEL_RATE, PANEL_END, growMake, spotNotes, timelines };
+  root.TuringVideo = { S, P, GW, GH, RUN, SPOTS_END, make, growthNotes, timelines };
 })(typeof window !== "undefined" ? window : globalThis);

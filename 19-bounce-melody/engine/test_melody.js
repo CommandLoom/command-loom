@@ -17,8 +17,12 @@ test("melodies are in range and the long video plays them in full", () => {
   for (const k of ["king", "joy", "elise"]) { const sg = V.song(k, V.SONG_LEN[k]); ok(sg.notes.every((m) => m >= 48 && m <= 84), k); }
   const ev = V.timelines[0].events(), s = V.S.find((x) => x.id === "king"); const kingNotes = ev.filter((e) => e.t >= s.t0 && e.t < s.t1 && e.voice === "marimba").length;
   ok(kingNotes === V.song("king", V.SONG_LEN.king).n, kingNotes); });
-test("timelines: whole frames, Shorts 30–40 s, sound inside and before the end fade", () => {
+test("close: the three replays are the songs' own last notes, one after the other, inside the scene", () => { const c = V.S.find((x) => x.id === "close");
+  for (let j = 0; j < 3; j++) { ok(V.REPLAY0(j) >= c.t0 && V.REPLAY0(j) + V.REPLAY < c.t1 - .5, j); if (j) ok(V.REPLAY0(j) >= V.REPLAY0(j - 1) + V.REPLAY, "overlap " + j); } });
+test("timelines: whole frames, Shorts 30–40 s, events inside, no gap in the sound longer than 1.5 s", () => {
   for (const tl of V.timelines) { ok(Math.abs(tl.dur * 30 - Math.round(tl.dur * 30)) < 1e-9, tl.id); if (tl.id !== "full") ok(tl.dur >= 30 && tl.dur <= 40, tl.id);
-    const ev = tl.events(); ok(ev.length && ev.every((e) => e.t >= 0 && e.t < tl.dur - .5), tl.id + " events " + ev.length); }
+    const ev = tl.events(), ts = ev.map((e) => e.t).sort((a, b) => a - b); ok(ev.length && ev.every((e) => e.t >= 0 && e.t < tl.dur - .5), tl.id + " events " + ev.length);
+    let gap = ts[0]; for (let i = 1; i < ts.length; i++) gap = Math.max(gap, ts[i] - ts[i - 1]); console.log("    " + tl.id + ": " + ev.length + " notes, longest gap " + gap.toFixed(2) + " s, last note " + ts[ts.length - 1].toFixed(2) + " of " + tl.dur);
+    ok(gap < 1.5, tl.id + " gap " + gap); }
   for (let i = 1; i < V.S.length; i++) ok(V.S[i].t0 === V.S[i - 1].t1, "contiguous"); });
 console.log(`\n${pass} tests passed`);

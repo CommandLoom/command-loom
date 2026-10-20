@@ -13,8 +13,13 @@ test("limits: the largest turn that still fits is under half a degree for all th
 test("free fall: first impact after √(2h/g); every bounce keeps 35% of the speed", () => {
   const d = F.drop(0.25, 0.04, false); ok(Math.abs(d.t1 - Math.sqrt(0.5 / 9.81)) < 1e-12, "t1");
   for (let i = 1; i < d.imp.length; i++) ok(Math.abs(d.imp[i].v / d.imp[i - 1].v - .35) < 1e-12, "e"); ok(Math.abs(d.y(d.t1)) < 1e-9, "contact"); });
-test("timelines: whole frames, Shorts 30–40 s, sound inside and before the end fade", () => {
+test("every piece of a row has landed and settled before its scene ends (long video and Shorts)", () => {
+  for (const k of V.ORDER) { const last = V.doneAt(k, V.LADDERS[k].values.length - 1); ok(last + .6 < V.SC, k + " " + last); }
+  for (const k of ["star", "heart"]) ok(1 + V.doneAt(k, 7, V.S_DT) + .6 < 29.4, "short " + k); });
+test("timelines: whole frames, Shorts 30–40 s, events inside, no gap in the sound longer than 1.5 s", () => {
   for (const tl of V.timelines) { ok(Math.abs(tl.dur * 30 - Math.round(tl.dur * 30)) < 1e-9, tl.id); if (tl.id !== "full") ok(tl.dur >= 30 && tl.dur <= 40, tl.id);
-    const ev = tl.events(); ok(ev.length && ev.every((e) => e.t >= 0 && e.t < tl.dur - .5), tl.id + " events " + ev.length); }
+    const ev = tl.events(), ts = ev.map((e) => e.t).sort((a, b) => a - b); ok(ev.length && ev.every((e) => e.t >= 0 && e.t < tl.dur - .5), tl.id + " events " + ev.length);
+    let gap = ts[0]; for (let i = 1; i < ts.length; i++) gap = Math.max(gap, ts[i] - ts[i - 1]); console.log("     " + tl.id + ": " + ev.length + " notes, longest gap " + gap.toFixed(2) + " s, last note " + ts[ts.length - 1].toFixed(2));
+    ok(gap < 1.5, tl.id + " gap " + gap); }
   for (let i = 1; i < V.S.length; i++) ok(V.S[i].t0 === V.S[i - 1].t1, "contiguous"); });
 console.log(`\n${pass} tests passed`);

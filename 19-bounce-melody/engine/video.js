@@ -11,18 +11,21 @@
   function song(key, dur) { const k = key + dur; if (cache[k]) return cache[k]; const p = PLAN[key], n = M[key].notes.length, q = RG.gainFor(n, dur, p.g0), v0 = 2 * RC * Math.sin(p.step / 2) / p.g0;
     return (cache[k] = { key, n, q, H: RG.run(RC, p.step, -Math.PI / 2, v0, q, n), dur, ...p, ...M[key] }); }
   // ---------- schedules ----------
-  const S = [["hook", 0, 4], ["king", 4, 36], ["joy", 36, 64], ["elise", 64, 86], ["close", 86, 100]].map(([id, t0, t1]) => ({ id, t0, t1 }));
-  const SONG_LEN = { king: 28, joy: 24, elise: 18 };
+  const S = [["hook", 0, 4], ["king", 4, 36], ["joy", 36, 64], ["elise", 64, 86], ["close", 86, 95]].map(([id, t0, t1]) => ({ id, t0, t1 }));
+  const SONG_LEN = { king: 30.4, joy: 26.4, elise: 20.4 };          // each song fills its scene; the title appears in the last second
+  // close: each ring replays the last REPLAY seconds of its song (its fastest notes), one after the other
+  const REPLAY = 2.4, REPLAY0 = (j) => 86.3 + 2.6 * j;
   const sceneAt = (t) => S.find((s) => t < s.t1) || S[S.length - 1];
   // ---------- drawing ----------
   const hsl = (h, l, a) => `hsla(${Math.round(((h % 1) + 1) % 1 * 360)},95%,${l}%,${a})`;
-  function ringScene(ctx, sg, t, cx, cy, s, k, rot = 0) {
-    const H = sg.H, last = H[H.length - 1].t, i = Math.min(RG.idx(H, t), H.length - 1), p = RG.pos(H, Math.min(t, last));
+  // t: where the ball is; tTrail: how much of the path is drawn (the whole path when a finished song is replayed)
+  function ringScene(ctx, sg, t, cx, cy, s, k, rot = 0, tTrail = t) {
+    const H = sg.H, last = H[H.length - 1].t, i = Math.min(RG.idx(H, t), H.length - 1), it = Math.min(RG.idx(H, tTrail), H.length - 1), p = RG.pos(H, Math.min(t, last));
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
-    const hue = sg.hue + .4 * Math.min(1, i / sg.n);
+    const hue = sg.hue + .4 * Math.min(1, it / sg.n);
     ctx.strokeStyle = hsl(hue, 70, .95); ctx.lineWidth = 5 * k; ctx.shadowColor = hsl(hue, 60, 1); ctx.shadowBlur = 22 * k; ctx.beginPath(); ctx.arc(0, 0, s, 0, 7); ctx.stroke(); ctx.shadowBlur = 0;
     ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "round";
-    for (let j = 1; j <= i; j++) { const a = H[j - 1], b = H[j], rec = i - j; ctx.strokeStyle = hsl(sg.hue + .4 * j / sg.n, 60, rec < 1 ? .9 : .28); ctx.lineWidth = (rec < 1 ? 3 : 1.6) * k;
+    for (let j = 1; j <= it; j++) { const a = H[j - 1], b = H[j], rec = j === i ? 0 : 2; ctx.strokeStyle = hsl(sg.hue + .4 * j / sg.n, 60, rec < 1 ? .9 : .28); ctx.lineWidth = (rec < 1 ? 3 : 1.6) * k;
       ctx.beginPath(); ctx.moveTo(a.x * s, -a.y * s); ctx.lineTo(b.x * s, -b.y * s); ctx.stroke(); }
     if (t < last) { const a = H[i]; ctx.strokeStyle = hsl(hue, 75, .95); ctx.lineWidth = 3 * k; ctx.beginPath(); ctx.moveTo(a.x * s, -a.y * s); ctx.lineTo(p[0] * s, -p[1] * s); ctx.stroke(); }
     for (let j = Math.max(1, i - 3); j <= i; j++) { const age = t - H[j].t; if (age < 0 || age > .35) continue;     // ripple where the ball just hit
@@ -46,8 +49,9 @@
     const W = 1920, sc = sceneAt(t), u = t - sc.t0, f = D.fade(t, sc.t0, sc.t1);
     if (sc.id === "hook") { const sg = song("king", SONG_LEN.king); ringScene(ctx, sg, sg.H[sg.n].t - 4.2 + u, 960, 600, 410, 1);
       D.text(ctx, "Every bounce plays the next note.", W / 2, 72, 60, C.text, 700); D.text(ctx, "Can you name the song?", W / 2, 140, 38, C.amber, 700); return; }
-    if (sc.id === "close") { ["king", "joy", "elise"].forEach((key, j) => { const sg = song(key, SONG_LEN[key]); ringScene(ctx, sg, sg.dur + 5, 400 + 560 * j, 560, 230, .7, .15 * u * (j % 2 ? -1 : 1));
-        D.text(ctx, sg.title, 400 + 560 * j, 850, 32, C.amber, 700, "center", f); D.text(ctx, sg.by, 400 + 560 * j, 895, 24, C.text, 600, "center", f); });
+    if (sc.id === "close") { ["king", "joy", "elise"].forEach((key, j) => { const sg = song(key, SONG_LEN[key]), r = t - REPLAY0(j), on = r >= 0 && r < REPLAY;
+        ringScene(ctx, sg, on ? sg.dur - REPLAY + r : sg.dur + 5, 400 + 560 * j, 560, 230 * (on ? 1.06 : 1), .7, 0, sg.dur + 5);
+        D.text(ctx, sg.title, 400 + 560 * j, 850, 32, on ? "#FFFFFF" : C.amber, 700, "center", f); D.text(ctx, sg.by, 400 + 560 * j, 895, 24, C.text, 600, "center", f); });
       D.text(ctx, "Three songs, one ball, one ring.", W / 2, 72, 56, C.text, 700, "center", f); D.text(ctx, RULE, W / 2, 1050, 24, C.dim, 500, "center", f); return; }
     songPanel(ctx, song(sc.id, SONG_LEN[sc.id]), u, W, 960, 600, 410, 1, 72, RULE);
   }
@@ -55,22 +59,25 @@
 
   // ---------- sound: the melody note at every bounce; a soft bell chord when the title appears ----------
   function notes(sg, t0, a = 0, b = Infinity, voice = "marimba") { const ev = []; for (let j = 1; j <= sg.n; j++) { const tt = sg.H[j].t; if (tt >= a && tt < b) ev.push({ t: t0 + tt - a, midi: sg.notes[j - 1], k: (sg.notes[j - 1] - 52) % 16, gain: .9, voice }); } return ev; }
-  const reveal = (sg, t0) => [{ t: t0 + sg.H[sg.n].t + .3, midi: sg.notes[sg.n - 1] - 12, k: 3, gain: .7, voice: "bell" }, { t: t0 + sg.H[sg.n].t + .3, midi: sg.notes[sg.n - 1] - 5, k: 8, gain: .5, voice: "bell" }];
+  // when the title appears: a bell chord on the last note, then the song's last three notes ringing an octave up
+  const reveal = (sg, t0) => [{ t: t0 + sg.H[sg.n].t + .3, midi: sg.notes[sg.n - 1] - 12, k: 3, gain: .7, voice: "bell" }, { t: t0 + sg.H[sg.n].t + .3, midi: sg.notes[sg.n - 1] - 5, k: 8, gain: .5, voice: "bell" },
+    ...[3, 2, 1].map((b, j) => ({ t: t0 + sg.H[sg.n].t + .75 + .3 * j, midi: sg.notes[sg.n - b] + 12, k: 10 + j, gain: .45, voice: "bell" }))];
   function fullEvents() { const s = Object.fromEntries(S.map((x) => [x.id, x])), king = song("king", SONG_LEN.king), ev = [...notes(king, 0, king.H[king.n].t - 4.2, king.H[king.n].t - .25)];
     for (const key of ["king", "joy", "elise"]) { const sg = song(key, SONG_LEN[key]); ev.push(...notes(sg, s[key].t0), ...reveal(sg, s[key].t0)); }
-    ev.push({ t: s.close.t0 + .4, midi: 57, k: 5, gain: .6, voice: "bell" }, { t: s.close.t0 + .4, midi: 64, k: 9, gain: .5, voice: "bell" });
-    return ev.filter((e) => e.t >= 0 && e.t < 99.4); }
+    ["king", "joy", "elise"].forEach((key, j) => { const sg = song(key, SONG_LEN[key]); ev.push(...notes(sg, REPLAY0(j), sg.dur - REPLAY, sg.dur + .01)); });
+    ev.push({ t: REPLAY0(2) + REPLAY + .2, midi: 57, k: 5, gain: .6, voice: "bell" }, { t: REPLAY0(2) + REPLAY + .2, midi: 64, k: 9, gain: .5, voice: "bell" });
+    return ev.filter((e) => e.t >= 0 && e.t < 94.4); }
 
   // ---------- Shorts ----------
   const VW = 1080, VH = 1920;
   const short = (key) => (ctx, t) => { const sg = song(key, 26); songPanel(ctx, sg, Math.max(0, t - .3), VW, 540, 1050, 470, 1.15, 230, "every bounce = next note · ball speeds up after each bounce"); };
   const timelines = [
-    { id: "full", name: "19 Bounce Melody (long)", file: "Command Loom - 19 Bounce Melody.mp4", W: 1920, H: 1080, dur: 100, draw: drawFull, events: fullEvents, voice: "marimba" },
+    { id: "full", name: "19 Bounce Melody (long)", file: "Command Loom - 19 Bounce Melody.mp4", W: 1920, H: 1080, dur: 95, draw: drawFull, events: fullEvents, voice: "marimba" },
     { id: "s1", name: "Short 1 · Guess the song (Grieg)", file: "Command Loom - Short 1 - Guess the Song.mp4", W: VW, H: VH, dur: 30, draw: zoomWrap(short("king"), VW, VH, (t) => 1 + .04 * t / 30), voice: "marimba",
       events: () => { const sg = song("king", 26); return [...notes(sg, .3), ...reveal(sg, .3)].filter((e) => e.t < 29.4); } },
     { id: "s2", name: "Short 2 · Guess the song (Beethoven)", file: "Command Loom - Short 2 - Guess This One.mp4", W: VW, H: VH, dur: 30, draw: zoomWrap(short("joy"), VW, VH, (t) => 1 + .04 * t / 30), voice: "marimba",
       events: () => { const sg = song("joy", 26); return [...notes(sg, .3), ...reveal(sg, .3)].filter((e) => e.t < 29.4); } }
   ];
   root.CLVideo = { title: "Command Loom · 19 Bounce Melody", timelines, ready: Promise.resolve() };
-  root.MelodyVideo = { S, song, SONG_LEN, timelines, RC };
+  root.MelodyVideo = { S, song, SONG_LEN, REPLAY, REPLAY0, timelines, RC };
 })(typeof window !== "undefined" ? window : globalThis);

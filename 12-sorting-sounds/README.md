@@ -1,6 +1,6 @@
 # 12 · Sorting Sounds
 
-Four sorting algorithms get the same 120 shuffled bars and the same speed. Quicksort finishes in 4.9 s, merge sort in 6.3 s, insertion sort in 32.6 s and bubble sort in 45.7 s. Every comparison is counted.
+Rainbow bars sorted step by step, and every step is heard: the pitch is the height of the bar being touched. Each algorithm gets a solo, then bubble, insertion, merge and quicksort race on the same 120 bars at the same speed.
 
 This folder renders the whole video (1:38, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
@@ -16,15 +16,14 @@ You need **Python 3** (a tiny local web server) and **Chrome or Edge** (WebCodec
 `engine/sorts.js` records each algorithm as a list of steps (compare, swap, write), so any moment can be replayed exactly:
 
 - Bubble sort (with an early exit when a pass makes no swap), insertion sort, top-down merge sort, and quicksort (Lomuto partition, last element as pivot).
-- Same shuffle for all four (seeded). At 240 steps per second each: steps 10,972 / 7,822 / 1,509 / 1,168 for bubble / insertion / merge / quick.
-- Comparisons for 120 items: 7,119 / 3,969 / 677 / 847. For 1,000 items (counted): 499,290 / 246,083 / 8,726 / 11,642.
-- For 1,000,000 items the video shows estimates from the usual formulas (n²/2, n²/4, n log₂ n, 1.39 n log₂ n): about 500 billion vs 20 million comparisons, i.e. about 8 minutes vs 0.02 seconds at a billion comparisons per second.
+- Solos: bubble sort on 40 bars, insertion sort on 60, merge sort and quicksort on 120, each at its own labelled speed.
+- Race: the same 120 shuffled bars (seeded), 470 steps per second each. Steps 10,972 / 7,822 / 1,509 / 1,168 for bubble / insertion / merge / quick; they finish after 23.3 / 16.6 / 3.2 / 2.5 s. Comparisons: 7,119 / 3,969 / 677 / 847.
 
 Sorting with sound has a long tradition; Timo Bingmann's "The Sound of Sorting" is the best-known example.
 
 ## What is measured, what is display
 
-Measured (checked by `engine/test_sorts.js`): every recorded run really sorts the bars; every counter and finishing time; the 1,000-item counts. The 1,000,000-item numbers are labelled as estimates. Sound is synthesized: when slow, one note per comparison with pitch following the bar's height; in the race, a soft tick every 150 steps and a short run of notes when an algorithm finishes.
+Measured (checked by `engine/test_sorts.js`): every recorded run really sorts the bars; every counter and finishing time. Display only: the rainbow colours and the finishing sweep. Sound is synthesized: each step plays the height of the bar it touches (up to 14 notes a second in a solo, 5 a second per algorithm in the race, each on its own side), and a rising sweep when a sort is done.
 
 ## Tests
 

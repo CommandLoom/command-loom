@@ -1,97 +1,183 @@
-// 11 Brachistochrone: four frictionless beads racing from A to B (brach.js). Every time and speed is computed from energy conservation.
+// 11 Brachistochrone: frictionless beads racing from A to B (brach.js). Four classic slopes race three times, then twelve curves
+// from the straight line to deeper-than-cycloid race at once, and finally a cycloid bowl sends beads from many heights to the bottom
+// at the same moment. Every position, time and speed comes from energy conservation; only the playback is slowed (labelled).
 (function (root) {
   "use strict";
   const K = root.Brach, D = root.CLDraw;
-  const C = { bg: "#06080D", text: "#F5F3EF", dim: "#9AA6B8" };
-  const B = [2, .8];
-  const CURVES = [["straight line", K.straight(B), [220, 226, 236]], ["steep drop, then slide", K.dropThenSlide(B), [239, 111, 174]], ["circular arc", K.arc(B), [53, 196, 240]], ["cycloid", K.cycloid(B), [255, 189, 56]]]
-    .map(([name, pts, col]) => ({ name, pts, col, tr: K.track(pts) }));
-  const ORDER = CURVES.map((c, i) => i).sort((a, b) => CURVES[a].tr.total - CURVES[b].tr.total);
-  const css = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
-  const DIP = Math.max(...CURVES[3].pts.map((p) => p[1])) - B[1];
-  const R_BOWL = .5, T_TAUTO = K.tautoTime(R_BOWL);
-  function zoomWrap(inner, W, H, zf) { return (ctx, t) => { const z = zf(t); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H); ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2); inner(ctx, t); ctx.restore(); }; }
-  function tracks(ctx, X, Y, prog = 1, k = 1, only) {
-    CURVES.forEach((c, i) => { if (only && !only.includes(i)) return; const n = Math.round(c.pts.length * prog); ctx.strokeStyle = css(c.col, .75); ctx.lineWidth = 4 * k; ctx.beginPath();
-      for (let j = 0; j < n; j += 8) { const p = c.pts[j]; j ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])); } ctx.stroke(); });
-    for (const [p, s] of [[[0, 0], "A"], [B, "B"]]) { ctx.fillStyle = C.text; ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 9 * k, 0, 7); ctx.fill(); D.text(ctx, s, X(p[0]) + (s === "A" ? -30 : 34) * k, Y(p[1]) - 4, 40 * k, C.text, 700); }
+  const C = { bg: "#05070C", text: "#F5F3EF", dim: "#9AA6B8", gold: [255, 189, 56] };
+  const css = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+  function hsl(h, s, l) { s /= 100; l /= 100; const a = s * Math.min(l, 1 - l), f = (n) => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); }; return [255 * f(0), 255 * f(8), 255 * f(4)]; }
+  const NOTE = "frictionless beads · g = 9.81 m/s² · times from energy conservation";
+
+  // ---------- races ----------
+  const CLASSIC = [["straight line", K.straight, [225, 230, 240]], ["steep drop", K.dropThenSlide, [239, 111, 174]], ["circular arc", K.arc, [53, 196, 240]], ["cycloid", K.cycloid, C.gold]];
+  const FAN_S = [0, .25, .5, .7, .85, 1, 1.15, 1.3, 1.5, 1.8, 2.2, 2.7];   // 0 = straight line, 1 = cycloid, above 1 = deeper than the cycloid
+  const cache = {};
+  function curves(kind, B) {
+    const id = kind + B; if (cache[id]) return cache[id];
+    const cs = kind === "four" ? CLASSIC.map(([name, f, col], i) => ({ name, col, pts: f(B), k: [1, 5, 8, 11][i] }))
+      : FAN_S.map((s, i) => ({ name: s === 1 ? "cycloid" : "", s, col: hsl(i * 300 / 11, 92, 62), pts: K.fan(B, s), k: 2 + i }));
+    cs.forEach((c) => c.tr = K.track(c.pts)); return cache[id] = cs;
   }
-  function beads(ctx, X, Y, tt, k = 1) { CURVES.forEach((c) => { const q = K.at(c.tr, tt), x = X(q.x), y = Y(q.y), g = ctx.createRadialGradient(x - 5 * k, y - 5 * k, 2, x, y, 18 * k);
-    g.addColorStop(0, "#FFFFFF"); g.addColorStop(.4, css(c.col)); g.addColorStop(1, css(c.col.map((v) => v * .4))); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 16 * k, 0, 7); ctx.fill(); }); }
-  function results(ctx, tt, x, y, k = 1, size = 34) {
-    ORDER.forEach((i, r) => { const c = CURVES[i], done = tt >= c.tr.total, a = done ? 1 : .35;
-      D.text(ctx, (done ? (r + 1) + ". " : "· ") + c.name, x, y + r * size * 1.5 * k, size * k, css(c.col, a), 700, "left");
-      D.text(ctx, (done ? c.tr.total : Math.min(tt, c.tr.total)).toFixed(3) + " s", x + 560 * k, y + r * size * 1.5 * k, size * k, css(c.col, a), 700, "right"); });
+  const nice = (x) => Math.floor(x * 2) / 2;
+  // start: tracks draw in over `draw` seconds, beads are released 0.2 s later; the slowdown is chosen so the slowest bead takes about `run` seconds
+  function race(kind, B, start, run, draw = 1) {
+    const cs = curves(kind, B), tmax = Math.max(...cs.map((c) => c.tr.total)), slow = nice(run / tmax), order = cs.map((_, i) => i).sort((a, b) => cs[a].tr.total - cs[b].tr.total);
+    let ymax = 0; cs.forEach((c) => c.pts.forEach((p) => { if (p[1] > ymax) ymax = p[1]; }));
+    const t0 = start + draw + .2; return { kind, B, cs, start, draw, t0, slow, order, tmax, ymax, end: t0 + tmax * slow };
+  }
+  function fit(R, [bx, by, bw, bh]) { const s = Math.min(bw / R.B[0], bh / R.ymax), ox = bx + (bw - R.B[0] * s) / 2; return { X: (x) => ox + x * s, Y: (y) => by + y * s }; }
+  const drawIn = (R, i) => (i / R.cs.length * .6) / 1.6 * R.draw;      // when curve i starts drawing (seconds after R.start)
+  function drawRace(ctx, R, tv, box, k = 1) {
+    const L = fit(R, box), tt = (tv - R.t0) / R.slow, prog = D.clamp((tv - R.start) / R.draw), n = R.cs.length, allIn = tt > R.tmax, win = R.order[0];
+    ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    R.cs.forEach((c, i) => {
+      const p = D.clamp(prog * 1.6 - i / n * .6), m = Math.max(2, Math.round(c.pts.length * p)); if (p <= 0) return;
+      ctx.beginPath(); for (let j = 0; j < m; j += 8) { const q = c.pts[j]; j ? ctx.lineTo(L.X(q[0]), L.Y(q[1])) : ctx.moveTo(L.X(q[0]), L.Y(q[1])); } const q = c.pts[m - 1]; ctx.lineTo(L.X(q[0]), L.Y(q[1]));
+      ctx.strokeStyle = css(c.col, .4); ctx.lineWidth = (R.kind === "four" ? 3 : 2.2) * k; ctx.stroke();
+      // the stretch the bead has already covered is painted bright and thick
+      const T = c.tr.T, e = tt <= 0 ? 0 : tt >= c.tr.total ? c.pts.length - 1 : (() => { let lo = 0, hi = T.length - 1; while (hi - lo > 1) { const mm = (lo + hi) >> 1; if (T[mm] <= tt) lo = mm; else hi = mm; } return lo; })();
+      if (e > 0) { ctx.beginPath(); for (let j = 0; j <= e; j += 8) { const q = c.pts[j]; j ? ctx.lineTo(L.X(q[0]), L.Y(q[1])) : ctx.moveTo(L.X(q[0]), L.Y(q[1])); } const qe = c.pts[e]; ctx.lineTo(L.X(qe[0]), L.Y(qe[1]));
+        const glow = allIn && i === win ? .4 + .2 * Math.sin((tv - R.end) * 6) : .2;
+        ctx.strokeStyle = css(c.col, glow); ctx.lineWidth = (allIn && i === win ? 26 : 18) * k; ctx.stroke();
+        ctx.strokeStyle = css(c.col, 1); ctx.lineWidth = (R.kind === "four" ? 7 : 5) * k; ctx.stroke(); }
+    });
+    for (const [p, s] of [[[0, 0], "A"], [R.B, "B"]]) { ctx.fillStyle = C.text; ctx.beginPath(); ctx.arc(L.X(p[0]), L.Y(p[1]), 9 * k, 0, 7); ctx.fill(); D.text(ctx, s, L.X(p[0]) + (s === "A" ? -34 : 36) * k, L.Y(p[1]) - 6 * k, 40 * k, C.text, 700); }
+    // finish rings
+    R.cs.forEach((c) => { const age = tv - (R.t0 + c.tr.total * R.slow); if (age < 0 || age > .9) return; ctx.strokeStyle = css(c.col, 1 - age / .9); ctx.lineWidth = 5 * k;
+      ctx.beginPath(); ctx.arc(L.X(R.B[0]), L.Y(R.B[1]), (18 + age * 130) * k, 0, 7); ctx.stroke(); });
+    // beads with short glowing trails
+    R.cs.forEach((c) => {
+      if (prog < 1) return; const q0 = K.at(c.tr, Math.max(0, tt));
+      const x = L.X(q0.x), y = L.Y(q0.y), r = (R.kind === "four" ? 22 : 17) * k, halo = ctx.createRadialGradient(x, y, 0, x, y, r * 2.4);
+      halo.addColorStop(0, css(c.col, .45)); halo.addColorStop(1, css(c.col, 0)); ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(x, y, r * 2.4, 0, 7); ctx.fill();
+      const g = ctx.createRadialGradient(x - r * .3, y - r * .3, 2, x, y, r * 1.1);
+      g.addColorStop(0, "#FFFFFF"); g.addColorStop(.4, css(c.col)); g.addColorStop(1, css(c.col.map((v) => v * .45))); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    });
+    ctx.restore();
+  }
+  // four-track board: one row per finished bead, in finishing order, bar length = time
+  function board4(ctx, R, tv, x, y, w, k = 1) {
+    const tt = (tv - R.t0) / R.slow;
+    R.order.forEach((i, r) => { const c = R.cs[i]; if (tt < c.tr.total) return; const a = D.clamp((tt - c.tr.total) * R.slow / .25), yy = y + r * 96 * k;
+      ctx.fillStyle = css(c.col, a); ctx.beginPath(); ctx.arc(x + 16 * k, yy, 14 * k, 0, 7); ctx.fill();
+      D.text(ctx, (r + 1) + ". " + c.name, x + 44 * k, yy, 34 * k, css(c.col, a), 700, "left"); D.text(ctx, c.tr.total.toFixed(3) + " s", x + w, yy, 34 * k, css(c.col, a), 700, "right");
+      ctx.fillStyle = css(c.col, .55 * a); ctx.fillRect(x + 44 * k, yy + 26 * k, (w - 44 * k) * c.tr.total / R.tmax * D.clamp(a * 1.5), 10 * k); });
+  }
+  // twelve-curve board: arrival time of each curve (flatter on the left, deeper on the right); the dots form a valley with the cycloid at the bottom
+  function fanBoard(ctx, R, tv, [bx, by, bw, bh], k = 1) {
+    const tt = (tv - R.t0) / R.slow, tmin = R.cs[R.order[0]].tr.total, lo = Math.floor(tmin * 20) / 20, hi = Math.ceil(R.tmax * 20) / 20, step = hi - lo > .3 ? .1 : .05;
+    const X = (i) => bx + (i + .5) / R.cs.length * bw, Y = (t) => by + bh - (t - lo) / (hi - lo) * bh;
+    ctx.save(); ctx.strokeStyle = "rgba(160,176,198,.35)"; ctx.lineWidth = 2 * k; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.stroke();
+    for (let t = lo; t <= hi + 1e-9; t += step) D.text(ctx, t.toFixed(2) + " s", bx - 12 * k, Y(t), 22 * k, C.dim, 600, "right");
+    D.text(ctx, "time to B", bx, by - 34 * k, 24 * k, C.dim, 600, "left"); D.text(ctx, "flatter", bx + 4 * k, by + bh + 30 * k, 22 * k, C.dim, 600, "left"); D.text(ctx, "deeper", bx + bw, by + bh + 30 * k, 22 * k, C.dim, 600, "right");
+    if (tt > R.tmax) { const a = D.clamp((tt - R.tmax) * R.slow / .5); ctx.strokeStyle = `rgba(245,243,239,${.5 * a})`; ctx.lineWidth = 2.5 * k; ctx.beginPath(); R.cs.forEach((c, i) => i ? ctx.lineTo(X(i), Y(c.tr.total)) : ctx.moveTo(X(i), Y(c.tr.total))); ctx.stroke(); }
+    R.cs.forEach((c, i) => { const age = (tt - c.tr.total) * R.slow; if (age < 0) return; const pop = 1 + .8 * Math.max(0, 1 - age / .3);
+      ctx.fillStyle = css(c.col); ctx.beginPath(); ctx.arc(X(i), Y(c.tr.total), 11 * k * pop, 0, 7); ctx.fill(); });
+    const w = R.order[0], wa = (tt - R.cs[w].tr.total) * R.slow; if (wa > 0) { ctx.strokeStyle = css(C.gold, D.clamp(wa / .3)); ctx.lineWidth = 3 * k; ctx.beginPath(); ctx.arc(X(w), Y(R.cs[w].tr.total), 22 * k, 0, 7); ctx.stroke();
+      D.text(ctx, R.cs[w].name || "fastest", X(w), Y(R.cs[w].tr.total) + 50 * k, 28 * k, css(C.gold, D.clamp(wa / .3)), 700); }
+    ctx.restore();
+  }
+  function raceEvents(R) {
+    const ev = [];   // each bead ticks at arc lengths L·(q/N)²: close together near A where it is slow, wider apart where it is fast (about one tick per 0.55 s of video)
+    R.cs.forEach((c, i) => ev.push({ t: R.start + drawIn(R, i), k: c.k, gain: .35 }));
+    ev.push({ t: R.t0, k: 8, voice: "wood", gain: .8 });
+    R.cs.forEach((c) => { const N = Math.max(6, Math.round(c.tr.total * R.slow / .55)); for (let q = 1, j = 0; q < N; q++) { const d = c.tr.length * (q / N) ** 2; while (c.tr.S[j] < d) j++; ev.push({ t: R.t0 + c.tr.T[j] * R.slow, k: c.k, gain: .22, voice: "marimba" }); } });
+    R.order.forEach((i, r) => ev.push({ t: R.t0 + R.cs[i].tr.total * R.slow, k: Math.max(2, 15 - r * (R.kind === "four" ? 3 : 1)), voice: "bell", gain: r === 0 ? .8 : .45 }));
+    ev.push({ t: R.end + .5, k: 12, gain: .5 });
+    return ev;
+  }
+
+  // ---------- tautochrone bowl ----------
+  // beads are released at rest; new beads join exactly one full swing later (when everyone is back at rest on the starting side),
+  // so the bowl goes from 3 to 6 to 12 beads without disturbing anyone. All of them reach the bottom together every half swing.
+  const R_BOWL = .5, Q = K.tautoTime(R_BOWL), AMP = [[.3, .6, .9], [.15, .45, .75], [.08, .22, .37, .52, .67, .82]];
+  const BALLS = AMP.flatMap((g, gi) => g.map((a) => ({ a, gi, add: 4 * Q * gi }))).sort((p, q) => p.a - q.a).map((b, r) => ({ ...b, col: hsl(r * 300 / 11, 92, 62), k: 2 + r }));
+  function tauto(ctx, tv, T0, slow, cx, cy, s, k = 1) {
+    const tt = (tv - T0) / slow;
+    ctx.save(); ctx.lineCap = "round"; ctx.beginPath();
+    for (let a = 0; a <= 2 * Math.PI + 1e-9; a += .02) { const x = cx + (R_BOWL * (a - Math.sin(a)) - Math.PI * R_BOWL) * s, y = cy - R_BOWL * (1 + Math.cos(a)) * s; a ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.strokeStyle = css(C.gold, .16); ctx.lineWidth = 18 * k; ctx.stroke(); ctx.strokeStyle = css(C.gold, .9); ctx.lineWidth = 4.5 * k; ctx.stroke();
+    for (let m = 0; m < 40; m++) { const age = tv - (T0 + (2 * m + 1) * Q * slow); if (age < 0 || age > 1.1) continue;
+      ctx.strokeStyle = `rgba(255,255,255,${(1 - age / 1.1) * .9})`; ctx.lineWidth = 6 * k; ctx.beginPath(); ctx.arc(cx, cy, (20 + age * 260) * k, 0, 7); ctx.stroke(); }
+    for (const b of BALLS) {
+      if (tt < b.add) continue; const s0 = b.a * 4 * R_BOWL, age = (tt - b.add) * slow;
+      if (b.gi > 0 && age < .6) { ctx.strokeStyle = css(b.col, 1 - age / .6); ctx.lineWidth = 4 * k; const p = K.bowlAt(R_BOWL, s0, 0); ctx.beginPath(); ctx.arc(cx + p.x * s, cy - p.h * s, (16 + age * 90) * k, 0, 7); ctx.stroke(); }
+      for (let j = 8; j >= 1; j--) { const p = K.bowlAt(R_BOWL, s0, Math.max(0, tt - j * .04 / slow)); ctx.fillStyle = css(b.col, .4 * (1 - j / 9)); ctx.beginPath(); ctx.arc(cx + p.x * s, cy - p.h * s, (14 - j) * k, 0, 7); ctx.fill(); }
+      const p = K.bowlAt(R_BOWL, s0, Math.max(0, tt)), x = cx + p.x * s, y = cy - p.h * s, g = ctx.createRadialGradient(x - 5 * k, y - 5 * k, 2, x, y, 18 * k);
+      g.addColorStop(0, "#FFFFFF"); g.addColorStop(.4, css(b.col)); g.addColorStop(1, css(b.col.map((v) => v * .45))); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 15 * k, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+  const firstMeet = (T0, slow) => T0 + Q * slow;
+  // the same beads as rows: distance along the bowl from the bottom (left of the centre line = left side); every row hits the line together
+  function lanes(ctx, tv, T0, slow, cx, y0, half, gap, k = 1) {
+    const tt = (tv - T0) / slow; ctx.save(); ctx.strokeStyle = "rgba(245,243,239,.35)"; ctx.lineWidth = 2 * k; ctx.beginPath(); ctx.moveTo(cx, y0 - gap); ctx.lineTo(cx, y0 + BALLS.length * gap); ctx.stroke();
+    BALLS.forEach((b, r) => { const y = y0 + r * gap; ctx.strokeStyle = "rgba(160,176,198,.18)"; ctx.beginPath(); ctx.moveTo(cx - half, y); ctx.lineTo(cx + half, y); ctx.stroke();
+      if (tt < b.add) return; const p = K.bowlAt(R_BOWL, b.a * 4 * R_BOWL, Math.max(0, tt)), x = cx - p.s / (4 * R_BOWL) * half;
+      ctx.fillStyle = css(b.col); ctx.beginPath(); ctx.arc(x, y, 10 * k, 0, 7); ctx.fill(); });
+    for (let m = 0; m < 40; m++) { const age = tv - (T0 + (2 * m + 1) * Q * slow); if (age < 0 || age > .6) continue; ctx.fillStyle = `rgba(255,255,255,${.35 * (1 - age / .6)})`; ctx.fillRect(cx - 14 * k, y0 - gap, 28 * k, (BALLS.length + 1) * gap); }
+    ctx.restore();
+  }
+  function tautoEvents(T0, slow, end) {
+    const ev = [{ t: T0, k: 8, voice: "wood", gain: .8 }], ds = .16 * 4 * R_BOWL, dt = 1 / 240;
+    for (let m = 0; T0 + (2 * m + 1) * Q * slow < end; m++) { const t = T0 + (2 * m + 1) * Q * slow; [2, 7, 12].forEach((k) => ev.push({ t, k, voice: "bell", gain: .6 })); ev.push({ t, k: 14, gain: .5 }); }
+    for (const b of BALLS) {
+      const s0 = b.a * 4 * R_BOWL, t1 = T0 + b.add * slow; if (t1 >= end) continue; if (b.gi > 0) ev.push({ t: t1, k: b.k, gain: .4 });
+      let last = Math.floor(s0 / ds); for (let t = t1 + dt; t < end; t += dt) { const c = Math.floor(K.bowlAt(R_BOWL, s0, (t - T0) / slow).s / ds); if (c !== last) { ev.push({ t, k: b.k, gain: .18, voice: "marimba" }); last = c; } }
+    }
+    return ev;
   }
 
   // ---------- long video ----------
-  const S = [["hook", 0, 4], ["ask", 4, 16], ["race", 16, 36], ["why", 36, 56], ["tauto", 56, 80], ["history", 80, 92], ["close", 92, 100]].map(([id, t0, t1]) => ({ id, t0, t1 }));
+  const S = [["hook", 0, 6], ["race", 6, 36], ["fan", 36, 63], ["tauto", 63, 91], ["close", 91, 100]].map(([id, t0, t1]) => ({ id, t0, t1 }));
   const sceneAt = (t) => S.find((s) => t < s.t1) || S[S.length - 1];
-  const SLOW = 12, RACE0 = 18, rt = (t) => Math.max(0, (t - RACE0) / SLOW);
-  const X = (x) => 200 + x * 560, Y = (y) => 250 + y * 560;
-  const BOWL = [.4, 1.3, 2.3].map((th0) => K.track(K.bowlFrom(R_BOWL, th0))), BX0 = (th0) => R_BOWL * (th0 - Math.sin(th0));
-  function bowlScene(ctx, tt, cx, cy, s, k = 1) {
-    // full cycloid bowl, lowest point at the centre
-    ctx.strokeStyle = "rgba(255,189,56,.75)"; ctx.lineWidth = 4 * k; ctx.beginPath();
-    for (let a = 0; a <= 2 * Math.PI + 1e-9; a += .02) { const x = R_BOWL * (a - Math.sin(a)) - Math.PI * R_BOWL, y = R_BOWL * (1 - Math.cos(a)); a ? ctx.lineTo(cx + x * s, cy + (y - 2 * R_BOWL) * s) : ctx.moveTo(cx + x * s, cy + (y - 2 * R_BOWL) * s); }
-    ctx.stroke(); const cols = [[53, 196, 240], [239, 111, 174], [220, 226, 236]];
-    [.4, 1.3, 2.3].forEach((th0, i) => { const tr = BOWL[i], q = K.at(tr, tt), y0 = R_BOWL * (1 - Math.cos(th0)), xs = BX0(th0) + q.x - Math.PI * R_BOWL, ys = y0 + q.y;
-      const x = cx + xs * s, y = cy + (ys - 2 * R_BOWL) * s; ctx.fillStyle = css(cols[i]); ctx.beginPath(); ctx.arc(x, y, 16 * k, 0, 7); ctx.fill(); });
-  }
+  const B1 = [2, 1];
+  const HOOK = race("fan", B1, 0, 4.6, .3), CLOSE = race("fan", B1, 91, 4.6, .3);
+  const RACES = [[2, 1], [2.4, .6], [1.4, 1.2]].map((B, i) => race("four", B, 6 + 10 * i, 7.6));
+  const FANS = [[2, 1], [2.6, .8]].map((B, i) => race("fan", B, 36 + 13.5 * i, 10.6, 1.2));
+  const TAUTO0 = 63.5, TAUTO_SLOW = 3;
+  const BOX4 = [150, 240, 1060, 740], FANBOX = [110, 230, 1130, 790], DOTBOX = [1380, 300, 450, 520];
   function inner(ctx, t) {
-    const W = 1920, H = 1080, sc = sceneAt(t), u = t - sc.t0, f = D.fade(t, sc.t0, sc.t1);
-    if (sc.id === "hook" || sc.id === "race" || sc.id === "close") {
-      const tt = sc.id === "race" ? rt(t) : 2; tracks(ctx, X, Y); beads(ctx, X, Y, tt); results(ctx, tt, 1300, 420);
-      if (sc.id === "hook") { D.text(ctx, "The fastest way down is not the straight line.", W / 2, 80, 58, C.text, 700); D.text(ctx, "Later in this video · frictionless beads, computed", W / 2, 142, 30, css([255, 189, 56]), 600); return; }
-      if (sc.id === "close") { D.text(ctx, "Shortest path is not the fastest path.", W / 2, 80, 58, C.text, 700, "center", f); D.text(ctx, "Frictionless beads, g = 9.81 m/s², A to B: 2 m across, 0.8 m down · times from energy conservation", W / 2, 1050, 24, C.dim, 500, "center", f); return; }
-      D.speed(ctx, SLOW + "× SLOWER", W); D.text(ctx, tt < CURVES[ORDER[0]].tr.total ? "Go." : "The cycloid wins, by dipping below the finish.", W / 2, 80, 56, C.text, 700, "center", f); return; }
-    if (sc.id === "ask") { tracks(ctx, X, Y, D.clamp((u - 1) / 6)); beads(ctx, X, Y, 0);
-      D.lines(ctx, ["From A to B. No friction, only gravity.", "Which bead arrives first?"], W / 2, 70, 52, C.text, f);
-      CURVES.forEach((c, i) => D.text(ctx, c.name, 1380, 420 + i * 51, 34, css(c.col), 700, "left", D.clamp((u - 2 - i * .8) / .4) * f)); return; }
-    if (sc.id === "why") {
-      const x0 = 260, y0 = 260, w = 1100, h = 560, tmax = 1.1, vmax = 5.2, Xv = (s) => x0 + s / tmax * w, Yv = (v) => y0 + h - v / vmax * h, up = D.clamp((u - .5) / 8) * tmax;
-      ctx.strokeStyle = "rgba(160,176,198,.45)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0, y0 + h); ctx.lineTo(x0 + w, y0 + h); ctx.stroke();
-      for (let s = 0; s <= 1; s += .25) D.text(ctx, s.toFixed(2) + " s", Xv(s), y0 + h + 30, 22, C.dim, 600); D.text(ctx, "speed (m/s)", x0, y0 - 26, 22, C.dim, 600, "left");
-      for (let v = 0; v <= 5; v++) D.text(ctx, String(v), x0 - 14, Yv(v), 20, C.dim, 600, "right");
-      CURVES.forEach((c) => { ctx.strokeStyle = css(c.col); ctx.lineWidth = 3.5; ctx.beginPath(); for (let s = 0; s <= Math.min(up, c.tr.total); s += .005) { const p = [Xv(s), Yv(K.at(c.tr, s).v)]; s ? ctx.lineTo(...p) : ctx.moveTo(...p); } ctx.stroke(); });
-      CURVES.forEach((c, i) => D.text(ctx, c.name, 1440, 420 + i * 51, 32, css(c.col), 700, "left", f));
-      D.text(ctx, u < 9 ? "The cycloid starts almost vertically, so it is fast from the very start." : "It even dips " + Math.round(DIP * 100) + " cm below B: losing height early buys speed.", W / 2, 80, 48, C.text, 700, "center", f); return; }
-    if (sc.id === "tauto") {
-      const tt = Math.max(0, (u - 3) / SLOW); bowlScene(ctx, tt, 960, 900, 560);
-      D.lines(ctx, ["Flip the cycloid into a bowl.", tt < T_TAUTO ? "Release three beads from different heights…" : "…they reach the bottom at the same moment."], W / 2, 70, 50, C.text, f);
-      D.text(ctx, Math.min(tt, T_TAUTO).toFixed(3) + " s", 1700, 1000, 48, C.text, 700, "right"); D.text(ctx, "all three: " + T_TAUTO.toFixed(3) + " s", 1700, 1050, 26, C.dim, 600, "right"); D.speed(ctx, SLOW + "× SLOWER", W); return; }
-    if (sc.id === "history") { tracks(ctx, X, Y, 1, 1, [3]);
-      D.lines(ctx, ["Johann Bernoulli posed this puzzle in June 1696.", "Newton, Leibniz, Jakob Bernoulli and others solved it:", "the answer is a cycloid, the curve traced by a point on a rolling wheel."], 1060, 380, 38, C.text, D.clamp((u - .4) / .6) * f); }
+    const W = 1920, sc = sceneAt(t);
+    D.text(ctx, NOTE, W / 2, 1052, 22, C.dim, 500);
+    if (sc.id === "hook" || sc.id === "close") { const R = sc.id === "hook" ? HOOK : CLOSE; drawRace(ctx, R, t, FANBOX); fanBoard(ctx, R, t, DOTBOX); D.speed(ctx, R.slow + "× SLOWER", W);
+      D.text(ctx, sc.id === "hook" ? "Twelve slopes. Which bead gets to B first?" : "The fastest way down is a cycloid.", W / 2, 80, 56, C.text, 700, "center", D.fade(t, sc.t0, sc.t1 + 1)); return; }
+    if (sc.id === "race") { const i = Math.min(2, Math.floor((t - 6) / 10)), R = RACES[i], f = D.fade(t, R.start, R.start + 10, .3);
+      ctx.save(); ctx.globalAlpha = f; drawRace(ctx, R, t, BOX4); board4(ctx, R, t, 1330, 380, 480); ctx.restore(); D.speed(ctx, R.slow + "× SLOWER", W);
+      D.text(ctx, ["Four slopes from A to B. Which bead wins?", "Move B. Race again.", "Move B again."][i], W / 2, 80, 54, C.text, 700, "center", f); return; }
+    if (sc.id === "fan") { const i = Math.min(1, Math.floor((t - 36) / 13.5)), R = FANS[i], f = D.fade(t, R.start, R.start + 13.5, .3);
+      ctx.save(); ctx.globalAlpha = f; drawRace(ctx, R, t, FANBOX); fanBoard(ctx, R, t, DOTBOX); ctx.restore(); D.speed(ctx, R.slow + "× SLOWER", W);
+      D.text(ctx, t < R.end ? (i ? "Another finish point." : "From the straight line to deeper than the cycloid.") : "Fastest: the cycloid.", W / 2, 80, 52, C.text, 700, "center", f); return; }
+    tauto(ctx, t, TAUTO0, TAUTO_SLOW, 960, 955, 560); D.speed(ctx, TAUTO_SLOW + "× SLOWER", W);
+    D.text(ctx, t < firstMeet(TAUTO0, TAUTO_SLOW) ? "Flip the cycloid into a bowl. Release from different heights." : "Every height reaches the bottom at the same moment.", W / 2, 80, 52, C.text, 700, "center", D.fade(t, sc.t0, sc.t1));
   }
-  const drawFull = zoomWrap(inner, 1920, 1080, (t) => { const sc = sceneAt(t); return 1 + .05 * (t - sc.t0) / (sc.t1 - sc.t0); });
-  function raceNotes(offset, slow) { const ev = [{ t: offset, k: 7, gain: .5 }]; ORDER.forEach((i, r) => ev.push({ t: offset + CURVES[i].tr.total * slow, k: 14 - r * 3, gain: .65 }));
-    CURVES.forEach((c, i) => [.25, .5, .75].forEach((fr) => { const j = c.pts.findIndex((p) => p[0] >= fr * B[0]); if (j > 0) ev.push({ t: offset + c.tr.T[j] * slow, k: 3 + i * 2, gain: .3 }); })); return ev; }
-  function fullEvents() {
-    const s = Object.fromEntries(S.map((x) => [x.id, x]));
-    return [{ t: .3, k: 9 }, ...CURVES.map((c, i) => ({ t: s.ask.t0 + 2 + i * .8, k: 4 + i * 3, gain: .5 })), ...raceNotes(RACE0, SLOW),
-      { t: s.why.t0 + 9, k: 12, gain: .5 }, ...[0, 1, 2].map((i) => ({ t: s.tauto.t0 + 3, k: 3 + i * 4, gain: .4 })), { t: s.tauto.t0 + 3 + T_TAUTO * SLOW, k: 2, gain: .7 }, { t: s.tauto.t0 + 3 + T_TAUTO * SLOW, k: 7, gain: .7 }, { t: s.tauto.t0 + 3 + T_TAUTO * SLOW, k: 12, gain: .7 },
-      { t: s.history.t0 + .4, k: 8, gain: .5 }, { t: s.close.t0 + .3, k: 6 }];
-  }
+  function zoomWrap(fn, W, H, zf) { return (ctx, t) => { const z = zf(t); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H); ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2); fn(ctx, t); ctx.restore(); }; }
+  const drawFull = zoomWrap(inner, 1920, 1080, (t) => { const sc = sceneAt(t); return 1 + .025 * (t - sc.t0) / (sc.t1 - sc.t0); });
+  const fullEvents = () => [...raceEvents(HOOK), ...RACES.flatMap(raceEvents), ...FANS.flatMap(raceEvents), { t: 63.1, k: 5, voice: "bell", gain: .5 }, ...tautoEvents(TAUTO0, TAUTO_SLOW, 90.9),
+    ...raceEvents(CLOSE), { t: CLOSE.end + 1.3, k: 9, voice: "bell", gain: .6 }].filter((e) => e.t < 99.4);
 
   // ---------- Shorts ----------
-  const XS = (x) => 120 + x * 420, YS = (y) => 640 + y * 420, S1_SLOW = 15, S1_0 = 6;
+  const S1A = race("four", B1, 0, 8.1, .6), S1B = race("fan", B1, 10.5, 16.2, 1.2), TBOX = [80, 440, 920, 700], TDOT = [160, 1260, 800, 420];
   function s1(ctx, t) {
-    const tt = Math.max(0, (t - S1_0) / S1_SLOW); tracks(ctx, XS, YS, D.clamp(t / 3), 1.1); beads(ctx, XS, YS, tt, 1.1); results(ctx, tt, 80, 1300, 1.2, 36);
-    D.lines(ctx, tt < CURVES[ORDER[0]].tr.total ? ["Four slopes, A to B.", "Which bead wins?"] : ["Not the straight one.", "The cycloid."], 540, 170, 76, C.text, 1);
-    D.text(ctx, "no friction · " + S1_SLOW + "× slower", 540, 1820, 30, C.dim, 600);
+    const R = t < 10.5 ? S1A : S1B, f = t < 10.5 ? D.fade(t, -1, 10.5, .3) : D.fade(t, 10.5, 33, .3);
+    ctx.save(); ctx.globalAlpha = f; drawRace(ctx, R, t, TBOX, 1.1); if (R === S1A) board4(ctx, R, t, 120, 1300, 840, 1.15); else fanBoard(ctx, R, t, TDOT, 1.2); ctx.restore();
+    D.lines(ctx, R === S1A ? ["Four slopes.", "Which bead wins?"] : t < R.end ? ["Now twelve slopes."] : ["The cycloid", "wins again."], 540, 170, 76, C.text, f);
+    D.text(ctx, "no friction · " + R.slow + "× slower", 540, 1840, 30, C.dim, 600);
   }
+  const S2_0 = 1, S2_SLOW = 3;
   function s2(ctx, t) {
-    const round = t < 16 ? 0 : 1, tt = Math.max(0, (t - (round ? 18 : 4)) / S1_SLOW); bowlScene(ctx, tt, 540, 1250, 300, 1);
-    D.lines(ctx, ["Three beads,", "three heights."], 540, 170, 80, C.text, 1);
-    D.text(ctx, tt < T_TAUTO ? "Which one reaches the bottom first?" : "All at the same moment: " + T_TAUTO.toFixed(3) + " s", 540, 400, 40, tt < T_TAUTO ? C.text : "#FFBD38", 700);
-    D.text(ctx, "cycloid bowl · no friction · " + S1_SLOW + "× slower", 540, 1520, 30, C.dim, 600);
+    tauto(ctx, t, S2_0, S2_SLOW, 540, 1080, 330, 1); lanes(ctx, t, S2_0, S2_SLOW, 540, 1250, 440, 40, 1);
+    D.lines(ctx, t < firstMeet(S2_0, S2_SLOW) ? ["Different heights.", "Who reaches the bottom first?"] : ["Different heights.", "Same arrival. Every time."], 540, 200, 70, C.text, 1);
+    D.text(ctx, "cycloid bowl · no friction · " + S2_SLOW + "× slower", 540, 1840, 30, C.dim, 600);
   }
   const timelines = [
     { id: "full", name: "11 Brachistochrone (long)", file: "Command Loom - 11 Brachistochrone.mp4", W: 1920, H: 1080, dur: 100, draw: drawFull, events: fullEvents, voice: "glass" },
-    { id: "s1", name: "Short 1 · Which slope is fastest", file: "Command Loom - Short 1 - Which Slope Wins.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s1, 1080, 1920, (t) => 1 + .06 * t / 30), voice: "glass", events: () => raceNotes(S1_0, S1_SLOW) },
-    { id: "s2", name: "Short 2 · Same moment", file: "Command Loom - Short 2 - Same Moment.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s2, 1080, 1920, (t) => 1 + .06 * t / 30), voice: "glass",
-      events: () => [4, 18].flatMap((t0) => [{ t: t0, k: 5, gain: .5 }, ...[2, 7, 12].map((k) => ({ t: t0 + T_TAUTO * S1_SLOW, k, gain: .65 }))]) }
+    { id: "s1", name: "Short 1 · Which slope wins", file: "Command Loom - Short 1 - Which Slope Wins.mp4", W: 1080, H: 1920, dur: 32, draw: zoomWrap(s1, 1080, 1920, (t) => 1 + .03 * t / 32), voice: "glass",
+      events: () => [...raceEvents(S1A), ...raceEvents(S1B)].filter((e) => e.t < 31.4) },
+    { id: "s2", name: "Short 2 · Same moment", file: "Command Loom - Short 2 - Same Moment.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s2, 1080, 1920, (t) => 1 + .03 * t / 30), voice: "glass",
+      events: () => tautoEvents(S2_0, S2_SLOW, 29.4) }
   ];
   root.CLVideo = { title: "Command Loom · 11 Brachistochrone", timelines };
-  root.BrachVideo = { S, B, CURVES, ORDER, DIP, BOWL, T_TAUTO, timelines };
+  root.BrachVideo = { S, HOOK, CLOSE, RACES, FANS, S1A, S1B, FAN_S, BALLS, R_BOWL, Q, TAUTO0, TAUTO_SLOW, S2_0, S2_SLOW, timelines };
 })(typeof window !== "undefined" ? window : globalThis);

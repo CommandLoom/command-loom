@@ -1,112 +1,105 @@
-// 14 Sandpile: the Bak–Tang–Wiesenfeld sandpile (sandpile.js). Every grain, toppling and count is computed.
-// The grids for every frame are computed once at load, in small chunks, so the page never locks up.
+// 14 Sandpile: the Bak–Tang–Wiesenfeld sandpile (sandpile.js). Grains are poured onto one centre square and the pile builds a
+// mandala by itself. Every grain and toppling is computed; squares that toppled in the current frame flash, and every avalanche is heard.
 (function (root) {
   "use strict";
   const K = root.Sand, D = root.CLDraw, FPS = 30;
-  const C = { bg: "#06080D", text: "#F5F3EF", dim: "#9AA6B8", amber: "#FFBD38", cyan: "#35C4F0" };
-  const COLS = [[10, 16, 30], [30, 110, 150], [255, 189, 56], [255, 244, 220]], FLASH = [255, 255, 255];
+  const C = { bg: "#0E0C2C", text: "#F5F3EF", dim: "#9AA6B8", amber: "#FFBD38" };
+  const COLS = [[14, 12, 44], [0, 170, 225], [240, 60, 150], [255, 200, 60]];          // 0, 1, 2, 3 grains
   const fmt = (v) => v.toLocaleString("en-US");
-  const yieldNow = () => new Promise((r) => { if (typeof MessageChannel === "undefined") return r(); const ch = new MessageChannel(); ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });
-  // ---------- schedules ----------
-  const S = [["hook", 0, 4], ["rules", 4, 18], ["random", 18, 54], ["centre", 54, 86], ["close", 86, 96]].map(([id, t0, t1]) => ({ id, t0, t1 }));
-  const sceneAt = (t) => S.find((s) => t < s.t1) || S[S.length - 1];
-  const RW = 100, RDROPS = 30000, RAND_FR = Math.round((S[2].t1 - S[2].t0) * FPS), dropsAtFrame = (f) => Math.min(RDROPS, Math.round(RDROPS * Math.pow(f / (RAND_FR - 60), 2.5)));
-  const CW = 151, CMAX = 32768, CENT_FR = Math.round((S[3].t1 - S[3].t0) * FPS), grainsAtFrame = (f) => Math.min(CMAX, Math.round(CMAX * Math.pow(f / (CENT_FR - 60), 2)));
-  const S1_FR = 27 * FPS, S2_FR = 27 * FPS;
-  let STATS = null;           // measured from the run: quiet drops, median and 99th-percentile avalanche
-  const stats = () => { if (STATS) return STATS; const nz = Array.from(RUN.sizes).filter((x) => x > 0).sort((a, b) => a - b);
-    return STATS = { quiet: RDROPS - nz.length, median: nz[Math.floor(nz.length / 2)], p99: nz[Math.floor(nz.length * .99)], max: nz[nz.length - 1] }; };
-  let RUN = null, RSNAP = null, CSNAP = null, S1SNAP = null, S2SNAP = null;
-  // snapshot = heights (0–3) in bits 0–1, bit 2 set if the cell toppled since the previous snapshot
-  async function randomSnaps(dropsAt, frames) { const p = new K.Pile(RW); p.g.set(RUN.init); const out = []; let d = 0;
-    for (let f = 0; f <= frames; f++) { const target = dropsAt(f); let rec = new Set(); while (d < target) { const r1 = new Set(); if (p.drop(RUN.sites[d], r1) > 0) rec = r1; d++; }   // flash only the frame's last avalanche
-      const s = new Uint8Array(RW * RW); for (let i = 0; i < s.length; i++) s[i] = p.g[i] | (rec.has(i) ? 4 : 0); out.push(s); if (f % 20 === 0) await yieldNow(); }
-    return out; }
-  async function centreSnaps(grainsAt, frames) { const p = new K.Pile(CW), c = (CW >> 1) * CW + (CW >> 1), out = []; let n = 0;
-    for (let f = 0; f <= frames; f++) { const target = grainsAt(f); p.g[c] += target - n; n = target; p.relax();
-      const s = new Uint8Array(CW * CW); for (let i = 0; i < s.length; i++) s[i] = p.g[i]; out.push(s); if (f % 10 === 0) await yieldNow(); }
-    return out; }
-  const ready = (async () => {
-    if (typeof document === "undefined") { RUN = K.randomRun(RW, RDROPS, 21); return; }      // tests only need the run
-    // same run as K.randomRun, but in chunks so the page stays responsive
-    { const r = K.rng(21), p = new K.Pile(RW); for (let i = 0; i < p.g.length; i++) p.g[i] = Math.floor(r() * 4);
-      RUN = { W: RW, init: Uint32Array.from(p.g), sites: new Int32Array(RDROPS), sizes: new Int32Array(RDROPS) };
-      for (let d = 0; d < RDROPS; d++) { const i = Math.floor(r() * p.g.length); RUN.sites[d] = i; RUN.sizes[d] = p.drop(i); if (d % 300 === 0) await yieldNow(); } }
-    RSNAP = await randomSnaps(dropsAtFrame, RAND_FR); CSNAP = await centreSnaps(grainsAtFrame, CENT_FR);
-    S1SNAP = await randomSnaps((f) => Math.min(RDROPS, Math.round(RDROPS * Math.pow(f / (S1_FR - 45), 2.5))), S1_FR);
-    S2SNAP = await centreSnaps((f) => Math.min(CMAX, Math.round(CMAX * Math.pow(f / (S2_FR - 45), 2))), S2_FR);
-  })();
+  const yieldNow = () => new Promise((r) => { if (typeof MessageChannel === "undefined") return r(); const ch = new MessageChannel(); ch.port1.onmessage = () => { ch.port1.close(); r(); }; ch.port2.postMessage(0); });
+
+  // ---------- pours ----------
+  // grains poured by u seconds: n(u) = a(e^{bu} − 1), starting at rate0 grains per second and reaching N at the end: slow at first, then faster and faster
+  function schedule(N, dur, rate0) { let lo = 1e-5, hi = 5; for (let i = 0; i < 100; i++) { const b = (lo + hi) / 2; if (rate0 / b * (Math.exp(b * dur) - 1) > N) hi = b; else lo = b; }
+    const b = (lo + hi) / 2, a = rate0 / b; return (u) => u <= 0 ? 0 : u >= dur ? N : Math.min(N, Math.round(a * (Math.exp(b * u) - 1))); }
+  const pour = (W, N, t0, dur, rate0) => ({ W, N, t0, dur, F: Math.round(dur * FPS), n: schedule(N, dur, rate0), c: (W >> 1) * W + (W >> 1) });
+  const P = { hook: pour(161, 32768, .2, 4.4, 300), full: pour(221, 65536, 13.3, 83, 6), s1: pour(161, 32768, 1.2, 27.5, 6), s2: pour(49, 2000, 1.2, 27.5, 4) };
+  const frameOf = (Q, t) => Math.max(0, Math.min(Q.F, Math.floor((t - Q.t0) * FPS)));
+  // a runner keeps one pile and pours up to the frame asked for (restarting if asked to go back); `mark` = squares that toppled in that frame
+  function runner(Q) { let st = null; return (f) => {
+    if (!st || st.f > f) st = { p: new K.Pile(Q.W), f: 0, n: 0, mark: new Uint8Array(Q.W * Q.W) };
+    while (st.f < f) { st.f++; const n = Q.n(st.f / FPS), last = st.f === f; if (last) st.mark.fill(0); if (n > st.n) { st.p.g[Q.c] += n - st.n; st.n = n; st.p.relax(last ? st.mark : null); } }
+    return st; }; }
+  const RUN = Object.fromEntries(Object.keys(P).map((k) => [k, runner(P[k])]));
+  // per frame: topplings in that frame and the pile's radius (farthest non-empty square along the centre row and column), measured once at load
+  const STAT = {};
+  async function measure(key) { const Q = P[key], W = Q.W, h = W >> 1, p = new K.Pile(W), T = new Float64Array(Q.F + 1), R = new Float32Array(Q.F + 1); let n = 0, r = 0;
+    for (let f = 1; f <= Q.F; f++) { const m = Q.n(f / FPS); if (m > n) { p.g[Q.c] += m - n; n = m; T[f] = p.relax(); }
+      while (r < h && (p.g[h * W + h + r + 1] || p.g[(h + r + 1) * W + h])) r++; R[f] = r; if (f % 60 === 0) await yieldNow(); }
+    STAT[key] = { T, R, total: T.reduce((a, b) => a + b, 0), final: p }; }
+  const ready = (async () => { for (const k of Object.keys(P)) await measure(k); })();
+  // camera radius: the pile's radius over the next 0.7 s, averaged, so the view widens smoothly ahead of the pile
+  function camR(key, f) { const R = STAT[key].R; let s = 0; for (let j = 0; j <= 20; j++) s += R[Math.min(R.length - 1, f + j)]; return s / 21; }
   const cvs = {};
-  function grid(ctx, snap, W, x0, y0, size, key) {
+  function pile(ctx, key, t, cx, cy, half, maxPx = 40) {
+    const Q = P[key], f = frameOf(Q, t), st = RUN[key](f), W = Q.W, s = Math.min(maxPx, half / (camR(key, f) + 1.5));
     const c = cvs[key] || (cvs[key] = document.createElement("canvas")); c.width = W; c.height = W; const g = c.getContext("2d"), img = g.createImageData(W, W), px = img.data;
-    for (let i = 0; i < W * W; i++) { const v = snap[i], col = v & 4 ? FLASH : COLS[v & 3]; px[i * 4] = col[0]; px[i * 4 + 1] = col[1]; px[i * 4 + 2] = col[2]; px[i * 4 + 3] = 255; }
-    g.putImageData(img, 0, 0); ctx.imageSmoothingEnabled = false; ctx.drawImage(c, x0, y0, size, size); ctx.imageSmoothingEnabled = true; ctx.strokeStyle = "rgba(160,176,198,.35)"; ctx.lineWidth = 2; ctx.strokeRect(x0, y0, size, size);
+    // flash strength: full when few squares toppled this frame, fainter when most of the pile toppled at once (so the pattern stays visible)
+    let nt = 0, area = 0; for (let i = 0; i < W * W; i++) { nt += st.mark[i]; if (st.p.g[i]) area++; } const fl = .6 * Math.min(1, .12 / Math.max(1e-9, nt / Math.max(1, area)));
+    for (let i = 0; i < W * W; i++) { const col = COLS[Math.min(3, st.p.g[i])], m = st.mark[i] ? fl : 0; px[i * 4] = col[0] + (255 - col[0]) * m; px[i * 4 + 1] = col[1] + (255 - col[1]) * m; px[i * 4 + 2] = col[2] + (255 - col[2]) * m; px[i * 4 + 3] = 255; }
+    g.putImageData(img, 0, 0); ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(c, cx - W / 2 * s, cy - W / 2 * s, W * s, W * s);
+    if (s >= 9) { const k = Math.ceil(half / s) + 1; ctx.strokeStyle = "rgba(5,6,14,.75)"; ctx.lineWidth = Math.max(1, s * .08); ctx.beginPath();
+      for (let j = -k; j <= k + 1; j++) { const x = cx + (j - .5) * s; ctx.moveTo(x, cy - k * s); ctx.lineTo(x, cy + k * s); ctx.moveTo(cx - k * s, x - cx + cy); ctx.lineTo(cx + k * s, x - cx + cy); } ctx.stroke(); }
+    ctx.restore(); return st.n;
   }
-  function histogram(ctx, upto, x0, y0, w, h, k = 1) {
-    const bins = new Array(16).fill(0); for (let d = 0; d < upto; d++) { const s = RUN.sizes[d]; if (s > 0) bins[Math.min(15, Math.floor(Math.log2(s)))]++; }
-    const mx = Math.log10(Math.max(10, ...bins) + 1), bw = w / 16;
-    ctx.strokeStyle = "rgba(160,176,198,.45)"; ctx.lineWidth = 1.5 * k; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0, y0 + h); ctx.lineTo(x0 + w, y0 + h); ctx.stroke();
-    bins.forEach((b, i) => { const hh = b ? Math.log10(b + 1) / mx * h : 0; ctx.fillStyle = "rgba(255,189,56,.85)"; ctx.fillRect(x0 + i * bw + 2, y0 + h - hh, bw - 4, hh); });
-    for (const p of [0, 5, 10, 15]) D.text(ctx, fmt(2 ** p), x0 + (p + .5) * bw, y0 + h + 24 * k, 18 * k, C.dim, 600);
-    D.text(ctx, "avalanches by size (topplings, doubling bins; count on log scale)", x0, y0 - 22 * k, 20 * k, C.dim, 600, "left");
-    return bins;
-  }
+  // sound: a note for each frame with an avalanche (at most ten a second; bigger avalanches lower and louder), a soft tick for each grain while grains
+  // are still few, and a bell each time the number of grains doubles
+  function pourNotes(key, tmax, gain = 1) { const Q = P[key], T = STAT[key].T, ev = []; let last = -1, tick = -1, next = 16, n0 = 0;
+    for (let f = 1; f <= Q.F; f++) { const t = Q.t0 + f / FPS, n = Q.n(f / FPS); if (t >= tmax) break;
+      if (T[f] > 0 && t - last >= .1) { const l = Math.log2(T[f]); ev.push({ t, k: Math.max(0, Math.min(15, 14 - Math.round(l * .85))), gain: (.25 + .45 * Math.min(1, l / 18)) * gain }); last = t; }
+      if (n > n0 && n - n0 < 3 && t - tick >= .1 && t - last > .05) { ev.push({ t, k: 8, voice: "wood", gain: .5 * gain }); tick = t; }
+      while (n >= next) { ev.push({ t, k: Math.max(0, Math.min(15, Math.log2(next) - 4)), voice: "bell", gain: .5 * gain }); next *= 2; } n0 = n; }
+    return ev; }
+
   // tiny rules demo: a 7 × 7 grid, one grain dropped in the middle, toppling in waves
   const RULE0 = [2, 3, 1, 2, 3, 0, 1, 3, 2, 3, 3, 1, 2, 2, 1, 3, 3, 3, 2, 3, 0, 2, 3, 3, 3, 3, 1, 2, 0, 2, 3, 3, 2, 3, 1, 1, 3, 2, 3, 1, 2, 3, 2, 0, 1, 2, 3, 1, 2];
   const RULE_WAVES = (() => { const W = 7, g = RULE0.slice(); g[24]++; const waves = [{ g: g.slice(), hot: [] }];
     for (let w = 0; w < 30; w++) { const hot = []; for (let i = 0; i < 49; i++) if (g[i] >= 4) hot.push(i); if (!hot.length) break;
       for (const i of hot) { g[i] -= 4; const x = i % W, y = (i / W) | 0; if (x > 0) g[i - 1]++; if (x < W - 1) g[i + 1]++; if (y > 0) g[i - W]++; if (y < W - 1) g[i + W]++; }
       waves.push({ g: g.slice(), hot }); } return waves; })();
+  const RULE_T0 = 5, WAVE0 = 7.4, WAVE_DT = .8;
+  function rules(ctx, t, x0, y0, cell, k = 1) {
+    const wi = Math.min(RULE_WAVES.length - 1, Math.max(0, Math.floor((t - WAVE0) / WAVE_DT) + 1)), before = t < WAVE0 - 1.2, wv = before ? { g: RULE0, hot: [] } : RULE_WAVES[t < WAVE0 ? 0 : wi];
+    wv.g.forEach((v, i) => { const x = x0 + (i % 7) * cell, y = y0 + Math.floor(i / 7) * cell, hot = wv.hot.includes(i), col = COLS[Math.min(3, v)];
+      ctx.fillStyle = hot ? "#FFFFFF" : v >= 4 ? "#FF3B3B" : `rgb(${col[0]},${col[1]},${col[2]})`; ctx.fillRect(x + 3 * k, y + 3 * k, cell - 6 * k, cell - 6 * k);
+      D.text(ctx, String(v), x + cell / 2, y + cell / 2 + 2 * k, cell * .42, hot || v === 3 ? "#1A1A1A" : C.text, 700); });
+    if (!before && t < WAVE0) { const a = D.clamp((t - WAVE0 + 1.2) / .4); ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 5 * k; ctx.strokeRect(x0 + 3 * cell, y0 + 3 * cell, cell, cell); }
+    return wi;
+  }
+  const ruleNotes = () => [{ t: RULE_T0 + .2, k: 6, voice: "bell", gain: .5 }, { t: WAVE0 - 1.2, k: 10, voice: "wood", gain: .8 }, ...RULE0.map((v, i) => ({ t: RULE_T0 + .5 + i * .03, k: 3 + v * 3, gain: .18 })),
+    ...RULE_WAVES.slice(1).map((w, i) => ({ t: WAVE0 + i * WAVE_DT, k: Math.min(15, 4 + w.hot.length), gain: .5 })), ...RULE_WAVES.slice(1).flatMap((w, i) => w.hot.slice(0, 4).map((_, j) => ({ t: WAVE0 + i * WAVE_DT + .06 * (j + 1), k: 12 - j, gain: .2 })))];
   function zoomWrap(inner, W, H, zf) { return (ctx, t) => { const z = zf(t); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H); ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2); inner(ctx, t); ctx.restore(); }; }
-  const fr = (t, t0, n) => Math.max(0, Math.min(n, Math.round((t - t0) * FPS)));
 
   // ---------- long video ----------
+  const S = [["hook", 0, 5], ["rules", 5, 13], ["pour", 13, 100]].map(([id, t0, t1]) => ({ id, t0, t1 }));
+  const sceneAt = (t) => S.find((s) => t < s.t1) || S[S.length - 1];
   function inner(ctx, t) {
-    const W = 1920, H = 1080, sc = sceneAt(t), u = t - sc.t0, f = D.fade(t, sc.t0, sc.t1);
-    if (sc.id === "hook" || sc.id === "close") { grid(ctx, CSNAP[CENT_FR], CW, 520, 170, 880, "c");
-      if (sc.id === "hook") { D.text(ctx, "Drop sand grain by grain. This builds itself.", W / 2, 80, 58, C.text, 700); D.text(ctx, "Later in this video · 32,768 grains, one rule", W / 2, 140, 28, C.amber, 600); return; }
-      D.text(ctx, "One simple rule. Avalanches of every size. Patterns nobody drew.", W / 2, 80, 50, C.text, 700, "center", f);
-      D.text(ctx, "Bak–Tang–Wiesenfeld sandpile (1987) · every grain and toppling computed", W / 2, 1050, 24, C.dim, 500, "center", f); return; }
-    if (sc.id === "rules") {
-      const wi = Math.min(RULE_WAVES.length - 1, Math.max(0, Math.floor((u - 3) / 1.1))), wv = RULE_WAVES[wi], cell = 96, x0 = 260, y0 = 220;
-      wv.g.forEach((v, i) => { const x = x0 + (i % 7) * cell, y = y0 + Math.floor(i / 7) * cell, hot = wv.hot.includes(i); const col = COLS[Math.min(3, v)];
-        ctx.fillStyle = hot ? "#FFFFFF" : v >= 4 ? "#EF6FAE" : `rgb(${col[0]},${col[1]},${col[2]})`; ctx.fillRect(x + 3, y + 3, cell - 6, cell - 6);
-        D.text(ctx, String(v), x + cell / 2, y + cell / 2 + 2, 40, hot || (v >= 2 && v < 4) ? "#1A1A1A" : C.text, 700); });
-      const L = ["Each square holds 0–3 grains.", "Add one grain to the middle.", "4 or more? It topples:", "one grain to each neighbour.", "Neighbours may topple too."];
-      L.forEach((s, i) => D.text(ctx, s, 1060, 360 + i * 74, 38, i === 2 ? C.amber : C.text, 700, "left", D.clamp((u - .5 - i * 1.6) / .5) * f));
-      D.text(ctx, "The rule", W / 2, 80, 58, C.text, 700, "center", f); D.text(ctx, wi ? "wave " + wi + " of topplings" : "", x0 + 3.5 * cell, y0 + 7 * cell + 40, 30, C.dim, 600, "center", f); return; }
-    if (sc.id === "random") { const fi = fr(t, sc.t0, RAND_FR), d = dropsAtFrame(fi); grid(ctx, RSNAP[fi], RW, 120, 170, 860, "r"); histogram(ctx, d, 1120, 420, 680, 420);
-      let last = 0; for (let j = d - 1; j >= 0 && j > d - 200; j--) if (RUN.sizes[j] > 0) { last = RUN.sizes[j]; break; }
-      D.text(ctx, fmt(d) + " grains dropped", 1120, 230, 46, C.text, 700, "left"); D.text(ctx, "last avalanche: " + fmt(last) + " topplings", 1120, 290, 32, C.amber, 700, "left");
-      const st = stats(); D.text(ctx, d < 400 ? "Drop grains at random spots…" : d < 12000 ? "Most grains do nothing. Then, now and then, a huge avalanche." : "Half of the avalanches are under " + st.median + " topplings; 1 in 100 is over " + fmt(Math.round(st.p99 / 100) * 100) + ".", W / 2, 80, 46, C.text, 700, "center", f); return; }
-    if (sc.id === "centre") { const fi = fr(t, sc.t0, CENT_FR), n = grainsAtFrame(fi); grid(ctx, CSNAP[fi], CW, 520, 170, 880, "c");
-      D.text(ctx, fmt(n) + " grains", 1780, 980, 52, C.amber, 700, "right"); D.text(ctx, "all dropped on the centre square", 1780, 1036, 26, C.dim, 600, "right");
-      D.text(ctx, "Now pour every grain onto one square.", W / 2, 80, 56, C.text, 700, "center", f); }
+    const W = 1920, sc = sceneAt(t), f = D.fade(t, sc.t0, sc.t1);
+    if (sc.id === "hook") { const n = pile(ctx, "hook", t, 960, 570, 470); D.text(ctx, "Pour sand on one square. One rule does the rest.", W / 2, 80, 56, C.text, 700); D.text(ctx, fmt(n) + " grains", 1840, 1010, 48, C.amber, 700, "right"); return; }
+    if (sc.id === "rules") { const wi = rules(ctx, t, 300, 240, 100);
+      ["Each square holds 0–3 grains.", "Add one more grain.", "4 grains? It topples: one to each neighbour.", "Neighbours can topple too."].forEach((s, i) =>
+        D.text(ctx, s, 1080, 380 + i * 90, 40, i === 2 ? C.amber : C.text, 700, "left", D.clamp((t - RULE_T0 - .4 - [0, 1.2, 2.4, 4][i]) / .4) * f));
+      D.text(ctx, "The rule", W / 2, 80, 58, C.text, 700, "center", f); if (t >= WAVE0) D.text(ctx, wi + (wi === 1 ? " wave" : " waves") + " of toppling", 650, 1000, 32, C.dim, 600, "center", f); return; }
+    const n = pile(ctx, "full", t, 960, 570, 470), Q = P.full, endT = Q.t0 + Q.dur;
+    D.text(ctx, fmt(n) + " grains", 1840, 1000, 56, C.amber, 700, "right"); D.text(ctx, "all poured on the centre square", 1840, 1046, 24, C.dim, 600, "right");
+    const cap = t < 22 ? "One grain at a time…" : t < 40 ? "Every 4 grains, a square topples. Avalanches spread outward." : t < endT - 4 ? "Nobody draws this pattern. The rule grows it." : "One rule. Patterns nobody drew.";
+    D.text(ctx, cap, W / 2, 80, 54, C.text, 700); if (t > endT - 4) D.text(ctx, "Bak–Tang–Wiesenfeld sandpile (1987) · every grain and toppling computed", W / 2, 1050, 22, C.dim, 500, "center", D.clamp((t - endT + 4) / .5));
   }
-  const drawFull = zoomWrap(inner, 1920, 1080, (t) => { const sc = sceneAt(t); return 1 + .04 * (t - sc.t0) / (sc.t1 - sc.t0); });
-  // sound: one note per avalanche (at most ten a second; bigger avalanches are lower and louder) and a chord at each doubling of the centre pile
-  function avalancheNotes(t0, dropsAt, frames, tmax) { const ev = []; let last = -1, d = 0;
-    for (let f = 0; f <= frames; f++) { const target = dropsAt(f), t = t0 + f / FPS; if (t > tmax) break; let big = 0; while (d < target) { big = Math.max(big, RUN.sizes[d]); d++; }
-      if (big > 0 && t - last >= .1) { const l = Math.log2(big); ev.push({ t, k: Math.max(0, 15 - Math.round(l)), gain: .3 + .5 * Math.min(1, l / 14) }); last = t; } } return ev; }
-  function doublingNotes(t0, grainsAt, frames, tmax) { const ev = []; let next = 1024;
-    for (let f = 0; f <= frames && next <= CMAX; f++) { const t = t0 + f / FPS; if (t > tmax) break; if (grainsAt(f) >= next) { const k = Math.round(Math.log2(next)) - 8; ev.push({ t, k, gain: .55 }, { t, k: k + 4, gain: .45 }); next *= 2; } } return ev; }
-  function fullEvents() { const s = Object.fromEntries(S.map((x) => [x.id, x]));
-    return [{ t: .3, k: 8 }, ...[0, 1, 2, 3, 4].map((i) => ({ t: s.rules.t0 + .5 + i * 1.6, k: 4 + i * 2, gain: .5 })), ...RULE_WAVES.slice(1).map((_, i) => ({ t: s.rules.t0 + 3 + (i + 1) * 1.1, k: 12 - i, gain: .45 })).filter((e) => e.t < s.rules.t1),
-      ...avalancheNotes(s.random.t0, dropsAtFrame, RAND_FR, s.random.t1 - .2), ...doublingNotes(s.centre.t0, grainsAtFrame, CENT_FR, s.centre.t1 - .2), { t: s.close.t0 + .3, k: 6 }]; }
+  const drawFull = zoomWrap(inner, 1920, 1080, (t) => 1 + .015 * Math.sin(t / 7));
+  const fullEvents = () => [...pourNotes("hook", 5), ...ruleNotes(), { t: 13.1, k: 4, voice: "bell", gain: .5 }, ...pourNotes("full", 99.4), ...[2, 7, 12].map((k) => ({ t: P.full.t0 + P.full.dur + .3, k, voice: "bell", gain: .6 }))].filter((e) => e.t < 99.4);
 
   // ---------- Shorts ----------
-  const s1Drops = (f) => Math.min(RDROPS, Math.round(RDROPS * Math.pow(f / (S1_FR - 45), 2.5))), s2Grains = (f) => Math.min(CMAX, Math.round(CMAX * Math.pow(f / (S2_FR - 45), 2)));
-  function s1(ctx, t) { const fi = fr(t, 1.5, S1_FR), d = s1Drops(fi); grid(ctx, S1SNAP[fi], RW, 40, 380, 1000, "s1"); histogram(ctx, d, 110, 1480, 860, 260, 1.1);
-    D.lines(ctx, ["Same grain of sand.", "Any size avalanche."], 540, 150, 74, C.text, 1); D.text(ctx, fmt(d) + " grains dropped at random", 540, 320, 34, C.amber, 600); }
-  function s2(ctx, t) { const fi = fr(t, 1.5, S2_FR), n = s2Grains(fi); grid(ctx, S2SNAP[fi], CW, 40, 480, 1000, "s2");
-    D.lines(ctx, ["Pour sand on one", "square. Watch."], 540, 160, 76, C.text, 1); D.text(ctx, fmt(n) + " grains", 540, 1580, 64, C.amber, 700); D.text(ctx, "one rule: 4 grains topple to the neighbours", 540, 1660, 32, C.dim, 600); }
+  function s1(ctx, t) { const n = pile(ctx, "s1", t, 540, 1020, 500); D.lines(ctx, ["Pour sand on one", "square. Watch."], 540, 160, 78, C.text, 1);
+    D.text(ctx, fmt(n) + " grains", 540, 1620, 66, C.amber, 700); D.text(ctx, "4 grains on a square: it topples to the neighbours", 540, 1700, 32, C.dim, 600); }
+  function s2(ctx, t) { const n = pile(ctx, "s2", t, 540, 1020, 500, 60); D.lines(ctx, ["One more grain.", "How big is the avalanche?"], 540, 160, 70, C.text, 1);
+    D.text(ctx, fmt(n) + " grains", 540, 1620, 66, C.amber, 700); D.text(ctx, "white squares: toppling right now", 540, 1700, 32, C.dim, 600); }
   const timelines = [
-    { id: "full", name: "14 Sandpile (long)", file: "Command Loom - 14 Sandpile.mp4", W: 1920, H: 1080, dur: 96, draw: drawFull, events: fullEvents, voice: "marimba" },
-    { id: "s1", name: "Short 1 · Any size avalanche", file: "Command Loom - Short 1 - Any Size Avalanche.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s1, 1080, 1920, (t) => 1 + .04 * t / 30), voice: "marimba",
-      events: () => avalancheNotes(1.5, s1Drops, S1_FR, 29.3) },
-    { id: "s2", name: "Short 2 · Pour sand on one square", file: "Command Loom - Short 2 - One Square of Sand.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s2, 1080, 1920, (t) => 1 + .05 * t / 30), voice: "marimba",
-      events: () => doublingNotes(1.5, s2Grains, S2_FR, 29.3) }
+    { id: "full", name: "14 Sandpile (long)", file: "Command Loom - 14 Sandpile.mp4", W: 1920, H: 1080, dur: 100, draw: drawFull, events: fullEvents, voice: "marimba" },
+    { id: "s1", name: "Short 1 · Pour sand on one square", file: "Command Loom - Short 1 - One Square of Sand.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s1, 1080, 1920, (t) => 1 + .02 * t / 30), voice: "marimba",
+      events: () => [{ t: .3, k: 6, voice: "bell", gain: .5 }, ...pourNotes("s1", 29.4), ...[2, 7, 12].map((k) => ({ t: P.s1.t0 + P.s1.dur + .2, k, voice: "bell", gain: .6 }))].filter((e) => e.t < 29.4) },
+    { id: "s2", name: "Short 2 · One more grain", file: "Command Loom - Short 2 - One More Grain.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s2, 1080, 1920, (t) => 1 + .02 * t / 30), voice: "marimba",
+      events: () => [{ t: .3, k: 6, voice: "bell", gain: .5 }, ...pourNotes("s2", 29.4), ...[2, 7, 12].map((k) => ({ t: P.s2.t0 + P.s2.dur + .2, k, voice: "bell", gain: .6 }))].filter((e) => e.t < 29.4) }
   ];
   root.CLVideo = { title: "Command Loom · 14 Sandpile", timelines, ready };
-  root.SandVideo = { stats, S, RW, RDROPS, CW, CMAX, get RUN() { return RUN; }, RULE_WAVES, timelines, ready, dropsAtFrame, grainsAtFrame, RAND_FR, CENT_FR };
+  root.SandVideo = { S, P, STAT, RULE_WAVES, schedule, timelines, ready };
 })(typeof window !== "undefined" ? window : globalThis);

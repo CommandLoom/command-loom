@@ -1,8 +1,8 @@
 # 21 · Perfect Fit
 
-A star, a gear, a heart and a plus sign are dropped onto blocks with a hole of the same shape, 2% bigger. Exact geometry decides whether each one goes in; turned half a degree, none of them does.
+A star, a gear, a heart and a plus sign dropped onto rows of blocks with a hole 2% bigger. Eight blocks per shape, one piece after another, each turned a little less or made a little smaller, until one drops in.
 
-This folder renders the whole video (1:40, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
+This folder renders the whole video (1:30, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
 ## Run it
 
@@ -13,16 +13,15 @@ You need **Python 3** (a tiny local web server) and **Chrome or Edge** (WebCodec
 
 ## The model
 
-`engine/fit.js`:
+`engine/fit.js`: a piece goes in only if its outline, turned and scaled as labelled, lies completely inside the hole's outline (the piece's own outline scaled to 102%): every corner inside and no edges crossing.
 
-- Each hole is the piece's outline scaled to 102%. A piece fits only if its outline, turned and scaled as labelled, lies entirely inside the hole's outline: every corner inside (point-in-polygon test) and no edges crossing (segment intersection test).
-- Largest turn that still fits (found by bisection): star 0.457°, gear 0.309°, plus 0.373°. The heart fits at 101.9% of its size and not at 102.1%.
-- The drop is free fall from 25 cm with g = 9.81 m/s², shown 4× slower. A piece that does not fit lands on the block and bounces, keeping 35% of its speed each time; a piece that fits drops to the bottom of the hole.
-- The pieces only fall straight down; they do not tip or slide.
+- Rows: star 30° → 0.3°, gear 15° → 0.2°, heart 115% → 101.9%, plus 10° → 0.3°. In every row only the last piece fits.
+- Largest turn that still fits: star 0.457°, gear 0.309°, plus 0.373°. The heart fits at 101.9% and not at 102.2%.
+- Drop: free fall from 25 cm (g = 9.81 m/s²), shown 4× slower; a piece that does not fit bounces on the block, keeping 35% of its speed each bounce. Pieces only fall straight down.
 
 ## What is measured, what is display
 
-Computed (checked by `engine/test_fit.js`): every fit / no-fit verdict on screen; the limit angles and size; the free-fall times and bounces. Display only: materials, wood texture, lighting and camera orbit (three.js). Sound is synthesized: a wood knock per impact (louder when faster) and a bell when a piece seats.
+Computed (checked by `engine/test_fit.js`): every fit and every drop. Display: three.js rendering and the camera. Sound is synthesized: a click and a note at each release (one step higher along the row), a soft note as the piece passes two thirds and one third of the drop height, a wood knock and a marimba note for every impact (louder when faster), and bells when a piece drops in. The camera follows the falling piece, then pulls back to the whole row.
 
 ## Tests
 

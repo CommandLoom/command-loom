@@ -1,6 +1,6 @@
 # 09 · Predator Prey
 
-A toy ocean with fish, sharks and four rules. Nobody steers it, yet the populations fall into a rhythm: fish boom, sharks boom, fish crash, sharks starve, and round again.
+A toy ocean with fish, sharks and four rules, shown full screen: blue schools of fish, orange packs of sharks. Nobody steers it, yet the populations fall into a rhythm, and the music is the populations themselves.
 
 This folder renders the whole video (1:40, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
@@ -15,16 +15,16 @@ You need **Python 3** (a tiny local web server) and **Chrome or Edge** (WebCodec
 
 Wa-Tor (A. K. Dewdney, "Computer Recreations", *Scientific American*, December 1984), in `engine/wator.js`:
 
-- A 160 × 90 grid that wraps around at the edges. Each step, every animal acts once, in a seeded random order.
+- A 160 × 90 grid that wraps around at the edges (the Shorts use 90 × 160). Each step, every animal acts once, in a seeded random order.
 - **Fish** move to a random free neighbouring cell; every 5 steps they leave a new fish behind.
 - **Sharks** move to a random neighbouring fish and eat it (+3 energy), otherwise to a free cell. Each step costs 1 energy; at 0 they starve. Every 10 steps they leave a new shark behind and split their energy with it.
-- Start: 30 % fish, 5 % sharks, seed 7. In the 900-step run neither species dies out; the fish peak 7 times and every shark peak follows a fish peak, 24 to 74 steps later (45.9 on average).
+- Start: 30 % fish, 5 % sharks, seed 7. The long video shows 1,350 steps at 15 steps per second: neither species dies out (at least 602 fish and 4 sharks), the fish peak 10 times, and each shark peak follows a fish peak by 24 to 67 steps (43.8 on average).
 
 Predator–prey cycles were first described mathematically by Alfred Lotka (1925) and Vito Volterra (1926). Real populations are more complicated than this toy model.
 
 ## What is measured, what is display
 
-Measured (checked by `engine/test_pred.js`): the counters, the peaks and the delay between fish and shark peaks, and that neither species dies out. The curves and the loop use 11-step moving averages, because shark numbers wobble with their 10-step breeding rhythm; the counters show raw numbers. The captions ("the fish multiply", …) come from the slopes of the measured counts. Sound is synthesized: one soft note at every measured peak, high for fish and low for sharks.
+Measured (checked by `engine/test_pred.js`): every cell and counter, the peaks, and that neither species dies out. The captions ("the fish multiply", …) come from the slopes of the measured counts; the strip at the bottom is the population history. Sound is the populations: every 2 steps a marimba note whose pitch follows the fish count, every 6 steps a low bell whose pitch follows the shark count (C major pentatonic).
 
 ## Tests
 

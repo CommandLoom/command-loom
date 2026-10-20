@@ -1,5 +1,6 @@
 // Command Loom event sonification. Every sound is one event from the video's own model or data:
-// {t: seconds, k: 0..15 (pitch / colour order), side: -1..1 (optional pan offset), gain: optional multiplier, voice: optional style}.
+// {t: seconds, k: 0..15 (pitch / colour order), side: -1..1 (optional pan offset), gain: optional multiplier, voice: optional style,
+//  midi: optional exact pitch (MIDI note number; used for melodies instead of k)}.
 // No drone, no noise bed, no per-scene normalisation. Coincident events share loudness, a slow automatic
 // gain keeps sparse and dense passages comparable, and the last 0.5 s always fades to silence.
 (function (root) {
@@ -11,14 +12,22 @@
     glass:   { base: 392.0, parts: [[1, .55, .16], [2.756, .40, .13], [5.404, .16, .07]], attack: .004, gain: .85, wet: .07, span: 10, lowpass: 3600 },
     marimba: { base: 220.0, parts: [[1, 1, .45], [3.93, .10, .12], [9.2, .015, .04]], attack: .008, gain: .70, wet: .16, span: 10, lowpass: 2600 },
     bell:    { base: 196.0, parts: [[1, 1, 1.0], [2.0, .25, .6], [2.756, .20, .4], [5.404, .08, .15]], attack: .006, gain: .55, wet: .26, span: 10, lowpass: 2800 },
-    wood:    { base: 0, parts: null, attack: .0005, gain: .55, wet: .10 }
+    wood:    { base: 0, parts: null, attack: .0005, gain: .55, wet: .10 },
+    metal:   { base: 330.0, parts: [[1, .7, .9], [2.76, .45, .7], [5.40, .28, .45], [8.93, .14, .3]], attack: .002, gain: .5, wet: .2, span: 10, lowpass: 5200 },
+    plop:    { base: 0, parts: null, plop: true, attack: .002, gain: .8, wet: .12 }
   };
   const TARGET = -27, MAX_BOOST = 6, CEILING = -1;
   function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-  function voice(buf, sr, st, k, amp, seed) {
+  const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  function voice(buf, sr, st, k, amp, seed, midi) {
+    if (st.plop) {                             // soft "plop": a low sine whose pitch falls quickly (jelly, water)
+      const f1 = midi != null ? midiHz(midi) : 110 * Math.pow(2, k / 15), len = Math.min(buf.length, Math.round(sr * .25)); let ph = 0;
+      for (let i = 0; i < len; i++) { const tt = i / sr, f = f1 * (1 + 1.5 * Math.exp(-tt / .025)); ph += 2 * Math.PI * f / sr; buf[i] += amp * 1.4 * Math.min(1, i / (st.attack * sr)) * Math.exp(-tt / .07) * Math.sin(ph); }
+      return;
+    }
     if (st.parts) {
-      const f0 = note(st.span ? Math.round(k * st.span / 15) : k, st.base), len = Math.min(buf.length, Math.round(sr * st.parts[0][2] * 5));
+      const f0 = midi != null ? midiHz(midi) : note(st.span ? Math.round(k * st.span / 15) : k, st.base), len = Math.min(buf.length, Math.round(sr * st.parts[0][2] * 5));
       for (const [mul, a, dec] of st.parts) {
         const f = f0 * mul; if (f > sr * .45) continue;
         const w = 2 * Math.PI * f / sr, d = Math.exp(-1 / (dec * sr)); let e = a * amp;
@@ -59,8 +68,8 @@
     sorted.forEach((e, idx) => {
       const st = STYLES[e.voice || styleName], at = Math.round(e.t * sr); tmp.fill(0);
       const view = tmp.subarray(0, Math.min(tmp.length, L.length - at));
-      voice(view, sr, st, e.k, .22 * st.gain * e.vel * (e.gain ?? 1), idx * 7919 + at);
-      const pan = Math.max(-1, Math.min(1, (e.k / 15 * 2 - 1) * .4 + (e.side || 0) * .45)), gl = Math.cos((pan + 1) * Math.PI / 4), gr = Math.sin((pan + 1) * Math.PI / 4);
+      voice(view, sr, st, e.k ?? 7, .22 * st.gain * e.vel * (e.gain ?? 1), idx * 7919 + at, e.midi);
+      const pan = Math.max(-1, Math.min(1, ((e.k ?? 7) / 15 * 2 - 1) * .4 + (e.side || 0) * .45)), gl = Math.cos((pan + 1) * Math.PI / 4), gr = Math.sin((pan + 1) * Math.PI / 4);
       for (let i = 0; i < view.length; i++) { const v = view[i]; if (v === 0 && i > sr * .2) continue; L[at + i] += v * gl; R[at + i] += v * gr; }
     });
     const lp = STYLES[styleName].lowpass;

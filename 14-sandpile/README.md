@@ -1,8 +1,8 @@
 # 14 · Sandpile
 
-Each square holds up to 3 grains. A fourth makes it topple: one grain to each neighbour, which may topple in turn. Drop grains one at a time and you get avalanches of every size; pour them all on one square and a pattern grows that nobody drew.
+Each square holds up to 3 grains; a fourth makes it topple onto its neighbours. Pour every grain onto one square, slowly at first and then faster and faster, and the pile grows into a symmetric mandala nobody drew.
 
-This folder renders the whole video (1:36, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
+This folder renders the whole video (1:40, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
 ## Run it
 
@@ -13,16 +13,15 @@ You need **Python 3** (a tiny local web server) and **Chrome or Edge** (WebCodec
 
 ## The model
 
-`engine/sandpile.js` is the Abelian sandpile of P. Bak, C. Tang and K. Wiesenfeld (Physical Review Letters 59, 381, 1987):
+The Abelian sandpile (P. Bak, C. Tang, K. Wiesenfeld, *Physical Review Letters* 59, 381, 1987) in `engine/sandpile.js`: a square holding 4 or more grains topples, giving one grain to each of its 4 neighbours; grains falling off the edge are lost.
 
-- A square with 4 or more grains topples: it loses 4 and each of its 4 neighbours gains 1. Grains pushed off the edge are lost. Every toppling counts as 1 toward the avalanche size.
-- The final stable state does not depend on the order of topplings, so the centre run can place all grains at once and relax.
-- **Random run:** 100 × 100 grid, random starting heights 0–3, 30,000 grains dropped on random squares (seed 21). Measured: 17,586 drops cause no toppling; of the avalanches, the median is 20 topplings, the 99th percentile 10,901, the largest 47,065.
-- **Centre run:** 32,768 grains on the middle square of a 151 × 151 grid; no grain reaches the edge.
+- Long video: 65,536 grains poured onto the centre of a 221 × 221 grid over 83 s, starting at 6 grains a second and speeding up (n(t) = a(e^{bt} − 1)). 77,107,818 topplings; the pile ends 94 squares from the centre and never reaches the edge.
+- Hook and Short 1: 32,768 grains on 161 × 161. Short 2: 2,000 grains on 49 × 49.
+- The final pattern does not depend on the order of topplings ("Abelian"): pouring frame by frame ends exactly where pouring everything at once ends, and the finished mandala is symmetric under 90° turns and mirroring.
 
 ## What is measured, what is display
 
-Computed (checked by `engine/test_sand.js`): every grid state, every avalanche size, the caption numbers, the histogram. Display only: colours, the white flash on the latest avalanche, camera push. Sound is synthesized marimba: in the random run, a note for the biggest avalanche in each tenth of a second (lower and louder when bigger); in the centre run, a chord each time the grain count doubles.
+Computed (checked by `engine/test_sand.js`): every grain, toppling and count. Squares flash white in the frame they topple (fainter when most of the pile topples at once); the camera keeps the pile filling the screen. Sound is synthesized: a soft tick for each grain while grains are few, a marimba note for each frame with an avalanche (lower and louder for bigger ones), and a bell each time the number of grains doubles.
 
 ## Tests
 

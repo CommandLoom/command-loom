@@ -1,8 +1,8 @@
 # 10 · Collatz
 
-Pick any whole number. Even: halve it. Odd: triple it and add 1. Repeat. Every number anyone has tried ends at 1, and nobody can prove that every number must.
+Halve it if it's even, triple it and add 1 if it's odd. 27 climbs to 9,232 and needs 111 steps to reach 1; then the paths of every number up to 10,000 grow into a glowing coral, one path at a time and then faster and faster.
 
-This folder renders the whole video (1:38, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
+This folder renders the whole video (1:40, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
 ## Run it
 
@@ -13,18 +13,16 @@ You need **Python 3** (a tiny local web server) and **Chrome or Edge** (WebCodec
 
 ## The maths
 
-`engine/collatz.js` applies n → n/2 (even) or n → 3n + 1 (odd) with exact integer arithmetic until it reaches 1.
+`engine/collatz.js` computes every path exactly.
 
-- 6 → 3 → 10 → 5 → 16 → 8 → 4 → 2 → 1: 8 steps.
-- 27 needs 111 steps and peaks at 9,232 (step 77).
-- Below 10,000 the longest path belongs to 6,171: 261 steps.
-- The problem is usually credited to Lothar Collatz (1937). As of 2025 every number below 2⁷¹ (about 2.4 × 10²¹) has been checked by computer (D. Barina and colleagues); there is still no proof.
-
-The coral draws each number's path backwards from 1, turning +8.65° on an even value and −16° on an odd value. Those angles are a popular artistic choice, not part of the maths; the paths are exact.
+- 27 needs 111 steps and peaks at 9,232 (step 77). Below 10,000 the longest path belongs to 6,171: 261 steps.
+- The coral: each number's path is traced backwards from 1, turning 8.65° one way on even values and 16° the other way on odd values; colour follows the number of steps. The last scene redraws 1 to 3,000 with four other pairs of angles. The angles are an artistic choice; the paths are exact.
+- The camera starts close to the young coral and pulls back as it grows (it always fits the coral of the next second).
+- Usually credited to Lothar Collatz (1937). Computers have checked every number below 2⁷¹ without an exception; there is still no proof.
 
 ## What is measured, what is display
 
-Computed (checked by `engine/test_collatz.js`): every path, step count and peak on screen, and that every number from 1 to 10,000 reaches 1. Display only: the coral angles, colours and transparency. Sound is synthesized: soft notes for the steps, higher for larger values.
+Computed (checked by `engine/test_collatz.js`): every path, step count and peak, and that the coral is complete inside its scene. Display only: the turning angles, colours, glow and camera. Sound is synthesized: for 27 one note per step (higher for bigger values); for the coral a note for each new path, higher for longer paths (at most eight a second).
 
 ## Tests
 

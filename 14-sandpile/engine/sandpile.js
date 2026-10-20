@@ -6,11 +6,11 @@
   function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   class Pile {
     constructor(W, H = W) { this.W = W; this.H = H; this.g = new Uint32Array(W * H); this.stack = new Int32Array(W * H * 4); this.lastTopples = null; }
-    // relax every unstable cell; returns the number of topplings (avalanche size); optionally records which cells toppled
+    // relax every unstable cell; returns the number of topplings (avalanche size); optionally records which cells toppled (a Set, or a 0/1 typed array)
     relax(record) {
       const W = this.W, H = this.H, g = this.g, st = this.stack; let sp = 0, count = 0;
       for (let i = 0; i < g.length; i++) if (g[i] >= 4) st[sp++] = i;
-      while (sp > 0) { const i = st[--sp]; if (g[i] < 4) continue; const q = g[i] >> 2; g[i] -= 4 * q; count += q; if (record) record.add(i);
+      while (sp > 0) { const i = st[--sp]; if (g[i] < 4) continue; const q = g[i] >> 2; g[i] -= 4 * q; count += q; if (record) { if (record.add) record.add(i); else record[i] = 1; }
         const x = i % W, y = (i / W) | 0;
         if (x > 0) { g[i - 1] += q; if (g[i - 1] >= 4) st[sp++] = i - 1; } if (x < W - 1) { g[i + 1] += q; if (g[i + 1] >= 4) st[sp++] = i + 1; }
         if (y > 0) { g[i - W] += q; if (g[i - W] >= 4) st[sp++] = i - W; } if (y < H - 1) { g[i + W] += q; if (g[i + W] >= 4) st[sp++] = i + W; }

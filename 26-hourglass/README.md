@@ -1,8 +1,8 @@
 # 26 · Hourglass
 
-The same hourglass (16 mm neck) filled with about the same amount of 1, 10, 100, 1,000 and 3,000 balls. The big ones jam, the small ones pour through.
+The same hourglass with a 16 mm neck, filled with about the same amount each time: 1, 10, 100, 1,000 and 3,000 balls. The big ones jam; the small ones pour, and up close at the neck every ball can be watched squeezing through.
 
-This folder renders the whole video (1:36, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
+This folder renders the whole video (1:10, 1920×1080, 30 fps, with sound) and its two Shorts in your browser, frame by frame.
 
 ## Run it
 
@@ -14,15 +14,15 @@ The simulation data is not stored in the repository; create it once with `node e
 
 ## The model
 
-- `engine/grains.js`: A simplified grain model: hard discs that cannot overlap (position-based method, 80 small steps per frame, 3 passes), gravity, simplified friction, no spinning.
-- `engine/hourglass.js`: The glass, the 55% fill rule and the placement of the balls on a closed gate.
-- `engine/precompute.js`: Runs the five simulations once and writes data/hourglass_<N>.bin; the page plays them back.
+`engine/hourglass.js` (glass and fills) and `engine/grains.js` (a simplified grain model: hard balls, gravity, friction, no spin), run once with Node by `engine/precompute.js` into `data/*.bin` (30 frames per simulated second), then played back.
+
+- The balls cover 52–55% of the top bulb every time: about 112, 34, 11, 3.6 and 2.0 mm wide.
+- 1, 10 and 100 balls: none through after 18 s; no ball moves more than 5 mm after the gate opens. 1,000 balls: all through after 5.9 s. 3,000 balls: all through after 3.7 s.
+- Playback: 1,000 balls 2× slower, 3,000 balls 4×, the neck close-up 8×, all five together 2× (labelled); slowed playback blends neighbouring recorded frames.
 
 ## What is measured, what is display
 
-Computed (checked by `engine/test_hourglass.js`): the balls cover 51–56% of the top bulb; every ball inside the glass in every frame; worst overlap 24% of a radius; 1, 10 and 100 balls: none through; 1,000: all through at 5.9 s; 3,000: at 3.7 s; deterministic (rerun check).
-
-Display only: ball colours from starting height, the 2×/4×/7.5× slow motion (labelled). Sound: a wooden tick each time a ball passes the neck.
+Computed (checked by `engine/test_hourglass.js`): every ball position, the counts and the emptying times. Display: colours by starting height. Sound is read from the recorded frames: a glassy tick each time a ball passes the neck and a wooden knock each time a falling ball lands.
 
 ## Tests
 

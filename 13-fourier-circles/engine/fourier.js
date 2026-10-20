@@ -26,6 +26,9 @@
   const star = () => Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? .4 : 1; return [r * Math.cos(a), r * Math.sin(a)]; });
   // the Command Loom chevron ">" as one thick closed outline
   const loom = () => [[-.85, -.85], [.65, 0], [-.85, .85], [-.85, .45], [-.05, 0], [-.85, -.45]];
-  const api = { resample, dft, chain, tip, error, heart, star, loom };
+  // a five-petal flower and an infinity sign (lemniscate of Gerono)
+  const flower = (N) => Array.from({ length: N }, (_, i) => { const t = 2 * Math.PI * i / N, r = .62 + .38 * Math.cos(5 * t); return [r * Math.sin(t), -r * Math.cos(t)]; });
+  const infinity = (N) => Array.from({ length: N }, (_, i) => { const t = 2 * Math.PI * i / N; return [Math.sin(t), Math.sin(t) * Math.cos(t) * 1.1]; });
+  const api = { resample, dft, chain, tip, error, heart, star, loom, flower, infinity };
   root.Fourier = api; if (typeof module !== "undefined") module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
