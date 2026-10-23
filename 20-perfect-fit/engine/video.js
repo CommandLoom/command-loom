@@ -54,18 +54,23 @@
       p.visible = true; p.position.set(it.x, THICK * CM + d.y(Math.max(0, it.tDrop)) * CM + .15, it.z); });
     S.camera.position.set(...cam.pos); S.camera.lookAt(...cam.look); S.camera.updateMatrixWorld();
     S.renderer.render(S.scene, S.camera); ctx.drawImage(S.renderer.domElement, 0, 0, W, H);
-    return items.map((it) => { const v = new THREE.Vector3(it.x, 0, it.z + 8.5).project(S.camera), u = new THREE.Vector3(it.x, H_DROP * CM + 6, it.z).project(S.camera);
-      return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, top: (1 - u.y) / 2 * H }; });
+    return items.map((it) => { const v = new THREE.Vector3(it.x, 0, it.z + 8.5).project(S.camera), u = new THREE.Vector3(it.x, H_DROP * CM + 6, it.z).project(S.camera), c = new THREE.Vector3(it.x, THICK * CM + 4, it.z).project(S.camera), f = new THREE.Vector3(it.x, THICK * CM * .5, it.z + 7.6).project(S.camera);
+      return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, top: (1 - u.y) / 2 * H, cx: (c.x + 1) / 2 * W, cy: (1 - c.y) / 2 * H, fx: (f.x + 1) / 2 * W, fy: (1 - f.y) / 2 * H }; });
   }
   // ---------- a ladder row: pieces released DT seconds apart (video time), each falling at 1/SLOW speed ----------
   const DT = 2.3, T_IN = .6;
   const tDropOf = (u, i, dt = DT) => (u - T_IN - i * dt) / SLOW;
   function rowItems(shape, u, pos, dt = DT) { return LADDERS[shape].values.map((v, i) => ({ shape, v, x: pos[i][0], z: pos[i][1], tDrop: tDropOf(u, i, dt) })); }
   const doneAt = (shape, i, dt = DT) => T_IN + i * dt + dropFor(fitsStep(shape, LADDERS[shape].values[i])).tRest * SLOW;     // video seconds into the row
-  function labels(ctx, shape, u, P, k = 1, dt = DT) {
+  function labels(ctx, shape, u, P, k = 1, dt = DT, onBlock = false) {
     LADDERS[shape].values.forEach((v, i) => { const p = P[i], fit = fitsStep(shape, v), d = dropFor(fit), land = T_IN + i * dt + d.t1 * SLOW, wait = u < T_IN + i * dt - .6;
-      D.text(ctx, short(shape, v), p.x, p.y + 34 * k, 34 * k, wait ? "rgba(245,243,239,.45)" : C.text, 700);
-      if (u >= land) { const a = D.clamp((u - land) / .25); D.text(ctx, fit ? "✓" : "✗", p.x, p.y + 78 * k, 44 * k, fit ? C.ok : C.no, 700, "center", a); } });
+      if (onBlock) D.text(ctx, short(shape, v), p.fx, p.fy, 30 * k, wait ? "rgba(245,243,239,.5)" : C.text, 700);       // Shorts: on the block's own front face
+      else D.text(ctx, short(shape, v), p.x, p.y + 34 * k, 34 * k, wait ? "rgba(245,243,239,.45)" : C.text, 700);
+      if (u < land) return; const a = D.clamp((u - land) / .25);
+      if (!onBlock) { D.text(ctx, fit ? "✓" : "✗", p.x, p.y + 78 * k, 44 * k, fit ? C.ok : C.no, 700, "center", a); return; }
+      // Shorts: the verdict sits on the block itself, in a dark badge, so it never covers the next row
+      ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = "rgba(6,8,13,.78)"; ctx.beginPath(); ctx.arc(p.cx, p.cy, 34 * k, 0, 7); ctx.fill();
+      ctx.strokeStyle = fit ? C.ok : C.no; ctx.lineWidth = 4 * k; ctx.stroke(); ctx.restore(); D.text(ctx, fit ? "✓" : "✗", p.cx, p.cy + 2 * k, 48 * k, fit ? C.ok : C.no, 700, "center", a); });
   }
   const ROW = (n, gap = 19) => Array.from({ length: n }, (_, i) => [(i - (n - 1) / 2) * gap, 0]);
   const GRID = (n) => Array.from({ length: n }, (_, i) => [(i % 2 - .5) * 19, (Math.floor(i / 2) - (n / 2 - 1) / 2) * 21]);
@@ -113,7 +118,7 @@
     return ev.filter((e) => e.t < 89.4); }
   // ---------- Shorts ----------
   const VW = 1080, VH = 1920, S_T0 = 1, S_DT = 3.3;
-  const shortDraw = (shape, title) => (ctx, t) => { const u = t - S_T0, P = render(ctx, VW, VH, rowItems(shape, u, GRID(8), S_DT), camTall(u)); labels(ctx, shape, u, P, 1.1, S_DT);
+  const shortDraw = (shape, title) => (ctx, t) => { const u = t - S_T0, P = render(ctx, VW, VH, rowItems(shape, u, GRID(8), S_DT), camTall(u)); labels(ctx, shape, u, P, 1.1, S_DT, true);
     D.lines(ctx, title, 540, 150, 74, C.text, 1); D.text(ctx, `hole 2% bigger · exact geometry · ${SLOW}× slower`, 540, 1840, 30, C.dim, 600); };
   const timelines = [
     { id: "full", name: "20 Perfect Fit (long)", file: "Command Loom - 20 Perfect Fit.mp4", W: 1920, H: 1080, dur: 90, draw: drawFull, events: fullEvents, voice: "wood" },

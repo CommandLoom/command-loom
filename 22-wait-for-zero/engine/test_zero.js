@@ -21,7 +21,7 @@ test("numbers shown: time to 0% for each shape, and every scene shows its whole 
   console.log("    time to 0%", KEYS.map((k) => k + " " + V.ZERO(k).toFixed(2) + " s").join(" · "));
   for (const sc of V.S.slice(1)) ok(V.ZERO(sc.id) < sc.t1 - sc.t0 - .8, sc.id + " fits its scene"); });
 test("timelines: whole frames, Shorts 30–40 s, sound inside and before the end fade", () => {
-  for (const tl of V.timelines) { ok(Math.abs(tl.dur * 30 - Math.round(tl.dur * 30)) < 1e-6, tl.id); if (tl.id !== "full") ok(tl.dur >= 30 && tl.dur <= 40, tl.id + " " + tl.dur);
+  for (const tl of V.timelines) { ok(Math.abs(tl.dur * 30 - Math.round(tl.dur * 30)) < 1e-6, tl.id); if (tl.id !== "full") ok(tl.dur >= 20 && tl.dur <= 60, tl.id + " " + tl.dur);      // Shorts: each runs until its shape reaches 0%
     const ev = tl.events(); ok(ev.length && ev.every((e) => e.t >= 0 && e.t < tl.dur - .5), tl.id + " events " + ev.length); }
   for (let i = 1; i < V.S.length; i++) ok(V.S[i].t0 === V.S[i - 1].t1, "contiguous"); });
 console.log(`\n${pass} tests passed`);

@@ -73,13 +73,26 @@
     D.lines(ctx, ["Same pixels, same speed."], 540, 120, 70, C.text, 1);
     D.text(ctx, "Bubble sort", 540, 270, 52, a.done === a.rows ? C.green : C.text, 700); D.text(ctx, "Quicksort", 540, 1090, 52, b.done === b.rows ? C.green : C.text, 700);
     D.text(ctx, `operations: ${fmt(a.total)}`, 540, 975, 34, C.amber, 600); D.text(ctx, `operations: ${fmt(b.total)}`, 540, 1795, 34, C.amber, 600); }
+  // more head-to-head Shorts in the same layout: the slower of the two finishes at 27 s, both at the same speed
+  const PAIRS = [["insertion", "selection", "Insertion vs Selection"], ["merge", "heap", "Merge vs Heap"], ["quick", "merge", "Quick vs Merge"]];
+  function pairShort(A, Bk) { const rate = Math.max(run("V", A).max, run("V", Bk).max) / V_RACE;
+    const draw = (ctx, t) => { const op = rate * Math.max(0, t - .5), a = grid(ctx, "V", A, op, 90, 330, 900, 600, true), b = grid(ctx, "V", Bk, op, 90, 1150, 900, 600, true);
+      D.lines(ctx, ["Same pixels, same speed."], 540, 120, 70, C.text, 1);
+      D.text(ctx, NAME[A], 540, 270, 52, a.done === a.rows ? C.green : C.text, 700); D.text(ctx, NAME[Bk], 540, 1090, 52, b.done === b.rows ? C.green : C.text, 700);
+      D.text(ctx, `operations: ${fmt(a.total)}`, 540, 975, 34, C.amber, 600); D.text(ctx, `operations: ${fmt(b.total)}`, 540, 1795, 34, C.amber, 600); };
+    // each side is heard through its slowest row, so its notes last until that sort is done
+    const slowest = (k) => { const R = run("V", k); let m = 0; R.forEach((r, i) => { if (r.ops > R[m].ops) m = i; }); return m; };
+    const events = () => [...notes("V", A, slowest(A), .5, rate, 0, 29.4, -.5), ...notes("V", Bk, slowest(Bk), .5, rate, 0, 29.4, .5), done(.5 + run("V", A).max / rate, 1, -.5), done(.5 + run("V", Bk).max / rate, 1, .5)];
+    return { draw, events, rate }; }
   const timelines = [
     { id: "full", name: "24 Pixel Sort (long)", file: "Command Loom - 24 Pixel Sort.mp4", W: 1920, H: 1080, dur: 100, draw: drawFull, events: fullEvents, voice: "glass" },
     { id: "s1", name: "Short 1 · Which Sort", file: "Command Loom - Short 1 - Which Sort.mp4", W: VW, H: VH, dur: 30, draw: zoomWrap(s1, VW, VH, (t) => 1 + .03 * (t % 5) / 5), voice: "glass",
       events: () => ALGS.flatMap((a, i) => [...notes("P", a, 45, i * 5 + .2, run("P", a).max / P_SORT, 0, i * 5 + 4.95), done(i * 5 + .2 + P_SORT)]).filter((e) => e.t < 29.4) },
     { id: "s2", name: "Short 2 · Bubble vs Quick", file: "Command Loom - Short 2 - Bubble vs Quick.mp4", W: VW, H: VH, dur: 30, draw: zoomWrap(s2, VW, VH, (t) => 1 + .03 * t / 30), voice: "glass",
-      events: () => { const rate = run("V", "bubble").max / V_RACE; return [...notes("V", "bubble", 20, .5, rate, 0, 29.4, -.5), ...notes("V", "quick", 20, .5, rate, 0, 29.4, .5), done(.5 + run("V", "quick").max / rate, 1, .5), done(.5 + V_RACE, 1, -.5)]; } }
+      events: () => { const rate = run("V", "bubble").max / V_RACE; return [...notes("V", "bubble", 20, .5, rate, 0, 29.4, -.5), ...notes("V", "quick", 20, .5, rate, 0, 29.4, .5), done(.5 + run("V", "quick").max / rate, 1, .5), done(.5 + V_RACE, 1, -.5)]; } },
+    ...PAIRS.map(([A, Bk, nm], i) => { const X = pairShort(A, Bk); return { id: "s" + (i + 3), name: `Short ${i + 3} · ${nm}`, file: `Command Loom - Short ${i + 3} - ${nm}.mp4`, W: VW, H: VH, dur: 30,
+      draw: zoomWrap(X.draw, VW, VH, (t) => 1 + .03 * t / 30), voice: "glass", events: () => X.events().filter((e) => e.t < 29.4) }; })
   ];
   root.CLVideo = { title: "Command Loom · 24 Pixel Sort", timelines, ready: Promise.resolve() };
-  root.PixelVideo = { S, ALGS, run, GRIDS, timelines, SORT, RACE, raceRate, V_RACE, P_SORT };
+  root.PixelVideo = { S, ALGS, run, GRIDS, timelines, SORT, RACE, raceRate, V_RACE, P_SORT, PAIRS };
 })(typeof window !== "undefined" ? window : globalThis);

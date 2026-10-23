@@ -22,13 +22,26 @@
     while (u < uEnd) { const a = f(u), b = f(u + du); s += Math.hypot(b[0] - a[0], b[1] - a[1]); u += du; tab.push([s, u]); }
     const L = s; return { L, path: (S) => { S = Math.min(S, L); let lo = 0, hi = tab.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (tab[m][0] <= S) lo = m; else hi = m; } const [s0, u0] = tab[lo], [s1, u1] = tab[hi]; return f(u0 + (u1 - u0) * (S - s0) / ((s1 - s0) || 1)); } };
   }
+  // any closed curve f(u) (u from 0 to 2π) wound inwards over several turns, shrinking from scale s0 by `shrink`, parametrised by arc length
+  function windPath(f, s0, turns, shrink, u0 = 0) {
+    const sc = (u) => s0 * (1 - shrink * (u - u0) / (2 * Math.PI * turns)), g = (u) => { const p = f(u); return [p[0] * sc(u), p[1] * sc(u)]; };
+    const tab = [[0, u0]]; let s = 0, u = u0; const du = 2e-4, uEnd = u0 + 2 * Math.PI * turns;
+    while (u < uEnd) { const a = g(u), b = g(u + du); s += Math.hypot(b[0] - a[0], b[1] - a[1]); u += du; tab.push([s, u]); }
+    return { L: s, path: (S) => { S = Math.min(S, s); let lo = 0, hi = tab.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (tab[m][0] <= S) lo = m; else hi = m; } const [s1, u1] = tab[lo], [s2, u2] = tab[hi]; return g(u1 + (u2 - u1) * (S - s1) / ((s2 - s1) || 1)); } };
+  }
+  const flowerF = (u) => { const r = 1 + .26 * Math.cos(6 * u); return [r * Math.cos(u + Math.PI / 2), r * Math.sin(u + Math.PI / 2)]; };       // six petals
+  const heartF = (u) => [16 * Math.pow(Math.sin(u), 3) / 17, (13 * Math.cos(u) - 5 * Math.cos(2 * u) - 2 * Math.cos(3 * u) - Math.cos(4 * u)) / 17];
+  const sized = (f, n, turns, shrink, u0) => windPath(f, n * P.d / windPath(f, 1, turns, shrink, u0).L * 1.001, turns, shrink, u0);   // sized so n dominoes fill it
+  const BIG_N = 3000, FLOWER = sized(flowerF, BIG_N, 12, .65, 0), BIGHEART = sized(heartF, BIG_N, 6, .62, Math.PI);
   const HEART_N = 450, HEART = heartPath(HEART_N * P.d / heartPath(1).L * 1.001);   // sized so 450 dominoes fill the winding heart
   const LAYOUTS = {
     10: () => along((s) => [s - 4.5 * P.d, 0], 10),
     100: () => along(spiralPath(0.07, 0.045), 100),
     1000: () => along(spiralPath(0.08, 0.045), 1000),
     10000: () => along(spiralPath(0.1, 0.045), 10000),
-    heart: () => along(HEART.path, HEART_N)
+    heart: () => along(HEART.path, HEART_N),
+    flower: () => along(FLOWER.path, BIG_N),
+    bigheart: () => along(BIGHEART.path, BIG_N)
   };
   const lay = {}, chains = {}, L = (k) => lay[k] || (lay[k] = LAYOUTS[k]()), CH = (k) => chains[k] || (chains[k] = M.chain(L(k).n));
   const fallen = (k, t) => { const c = CH(k); let lo = 0, hi = c.n; while (lo < hi) { const m = (lo + hi) >> 1; if (c.t0[m] + c.T[m] <= t) lo = m + 1; else hi = m; } return lo; };
@@ -86,11 +99,21 @@
   const s1 = (ctx, t) => { const z = 1 + .03 * t / 31; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, VW, VH); vert(ctx, "1000", Math.max(0, t - .4) * S1V, S1V, ["1,000 dominoes", "in a spiral."], 700 * z); };
   const S2V = 14;                                             // Short 2: 10,000 dominoes at 14× real speed
   const s2 = (ctx, t) => { const z = 1 + .03 * t / 30; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, VW, VH); vert(ctx, "10000", Math.max(0, t - .4) * S2V, S2V, ["10,000 dominoes.", "Wait for the last one."], 230 * z); };
+  // Shorts 3 and 4: 3,000 dominoes in a winding flower and a winding heart, 4× real speed
+  const BIGV = 4, big = (k, title, sc, cy, dur) => (ctx, t) => { const z = 1 + .03 * t / dur; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, VW, VH);
+    const n = field(ctx, k, Math.max(0, t - .4) * BIGV, 540, cy, sc * z), N = L(k).n;
+    D.lines(ctx, title, 540, 150, 76, C.text, 1); D.text(ctx, `${fmt(n)} / ${fmt(N)} fallen`, 540, 1680, 54, n === N ? C.green : C.amber, 700);
+    D.text(ctx, speedLabel(BIGV) + " · rigid dominoes, simplified hand-over", 540, 1760, 30, C.dim, 600); };
+  const BIG_DUR = 31;
   const timelines = [
     { id: "full", name: "26 Domino Spiral (long)", file: "Command Loom - 26 Domino Spiral.mp4", W: 1920, H: 1080, dur: 100, draw: drawFull, events: fullEvents, voice: "wood" },
     { id: "s1", name: "Short 1 · 1,000 Dominoes", file: "Command Loom - Short 1 - 1000 Dominoes.mp4", W: VW, H: VH, dur: 31, draw: s1, voice: "wood", events: () => ticks("1000", .4, 0, 30.2 * S1V, S1V) },
-    { id: "s2", name: "Short 2 · 10,000 Dominoes", file: "Command Loom - Short 2 - 10000 Dominoes.mp4", W: VW, H: VH, dur: 30, draw: s2, voice: "wood", events: () => ticks("10000", .4, 0, 29.2 * S2V, S2V) }
+    { id: "s2", name: "Short 2 · 10,000 Dominoes", file: "Command Loom - Short 2 - 10000 Dominoes.mp4", W: VW, H: VH, dur: 30, draw: s2, voice: "wood", events: () => ticks("10000", .4, 0, 29.2 * S2V, S2V) },
+    { id: "s3", name: "Short 3 · Domino Flower", file: "Command Loom - Short 3 - Domino Flower.mp4", W: VW, H: VH, dur: BIG_DUR, draw: big("flower", ["3,000 dominoes", "in a flower."], 270, 1000, BIG_DUR), voice: "wood",
+      events: () => ticks("flower", .4, 0, (BIG_DUR - .9) * BIGV, BIGV) },
+    { id: "s4", name: "Short 4 · Domino Heart", file: "Command Loom - Short 4 - Domino Heart.mp4", W: VW, H: VH, dur: BIG_DUR, draw: big("bigheart", ["3,000 dominoes", "in a heart."], 122, 915, BIG_DUR), voice: "wood",
+      events: () => ticks("bigheart", .4, 0, (BIG_DUR - .9) * BIGV, BIGV) }
   ];
   root.CLVideo = { title: "Command Loom · 26 Domino Spiral", timelines, ready: Promise.resolve() };
-  root.DominoVideo = { S, SPEED, L, CH, fallen, M, timelines, S1V, S2V, HEART_N };
+  root.DominoVideo = { S, SPEED, L, CH, fallen, M, timelines, S1V, S2V, HEART_N, BIG_N, BIGV, BIG_DUR };
 })(typeof window !== "undefined" ? window : globalThis);

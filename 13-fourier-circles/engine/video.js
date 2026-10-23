@@ -84,17 +84,25 @@
     pen(ctx, CO.heart, K, s, 540, 1000, 440, HUE.heart, 1.1);
     D.lines(ctx, ["Spinning circles", "draw a heart."], 540, 170, 80, C.text, 1); D.text(ctx, K + (K === 1 ? " circle" : " circles"), 540, 1640, 64, C.amber, 700);
   }
-  const S2D = 4.05;
-  function s2(ctx, t) { const i = Math.min(KS.length - 1, Math.floor(Math.max(0, t - 1) / S2D)), K = KS[i], s = Math.min(1, Math.max(0, (t - 1 - i * S2D) / (S2D - .5)));
-    pen(ctx, CO.heart, K, s, 540, 960, 420, (HUE.heart + i * 40) % 360, 1.1);
-    D.lines(ctx, ["How many circles", "for a heart?"], 540, 170, 80, C.text, 1); D.text(ctx, K + (K === 1 ? " circle" : " circles"), 540, 1560, 64, C.amber, 700); D.text(ctx, "miss " + pct(ERR[K]) + " of its height", 540, 1640, 40, C.dim, 600); }
+  // one Short per shape: circles added one rim at a time (doubling up to the shape's count), then the full chain drawing faster and faster
+  function shapeShort(key, K, title, cy = 1000, size = 430) {
+    const stages = [1, 2, 4, 8, 16, 32, 64, 128].filter((k) => k < K).concat([K]), T0 = SB0 + stages.length * SBD + .2, laps = { t0: T0, durs: [5, 3, 2, 1.5] };
+    const draw = (ctx, t) => { let k = K, s; if (t < T0) { const i = Math.max(0, Math.min(stages.length - 1, Math.floor((t - SB0) / SBD))); k = stages[i]; s = Math.min(1, Math.max(0, (t - SB0 - i * SBD) / (SBD - .1))); } else s = lapsAt(t, T0, laps.durs);
+      pen(ctx, CO[key], k, s, 540, cy, size, HUE[key], 1.1); D.lines(ctx, title, 540, 170, 80, C.text, 1); D.text(ctx, k + (k === 1 ? " circle" : " circles"), 540, 1640, 64, C.amber, 700);
+      D.text(ctx, "miss " + pct(F.error(CO[key], k, SH[key]) / SPAN[key]) + " of its height", 540, 1712, 36, C.dim, 600); };
+    const events = () => [...stages.flatMap((k, i) => { const t0 = SB0 + i * SBD; return [{ t: t0, k: 2 + i, voice: "bell", gain: .5 }, ...penNotes(CO[key], k, t0, [SBD - .1], t0 + SBD - .1, 0, .9)]; }), ...penNotes(CO[key], K, T0, laps.durs, 29.4)];
+    return { draw, events, stages, T0 };
+  }
+  const SPAN = Object.fromEntries(Object.entries(SH).map(([k, z]) => [k, Math.max(...z.map((p) => p[1])) - Math.min(...z.map((p) => p[1]))]));
+  const SHORTS = [["star", 64, ["Spinning circles", "draw a star."], "a Star"], ["flower", 32, ["Spinning circles", "draw a flower."], "a Flower"], ["infinity", 32, ["Spinning circles", "draw infinity."], "Infinity"],
+    ["loom", 128, ["Spinning circles", "draw our logo."], "Our Logo"]].map(([key, K, title, name], i) => ({ n: i + 2, key, K, title, name, ...shapeShort(key, K, title) }));
   const timelines = [
     { id: "full", name: "13 Fourier Circles (long)", file: "Command Loom - 13 Fourier Circles.mp4", W: 1920, H: 1080, dur: 100, draw: drawFull, events: fullEvents, voice: "glass" },
     { id: "s1", name: "Short 1 · Circles draw a heart", file: "Command Loom - Short 1 - Circles Draw a Heart.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s1, 1080, 1920, (t) => 1 + .03 * t / 30), voice: "glass",
       events: () => [...BUILD.flatMap((K, i) => { const t0 = SB0 + i * SBD; return [{ t: t0, k: 2 + i, voice: "bell", gain: .5 }, ...penNotes(CO.heart, K, t0, [SBD - .1], t0 + SBD - .1, 0, .9)]; }), ...penNotes(CO.heart, 64, SH1.t0, SH1.durs, 29.4)] },
-    { id: "s2", name: "Short 2 · How many circles", file: "Command Loom - Short 2 - How Many Circles.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s2, 1080, 1920, (t) => 1 + .03 * t / 30), voice: "glass",
-      events: () => KS.flatMap((K, i) => { const t0 = 1 + i * S2D; return [{ t: t0, k: 2 + i * 2, voice: "bell", gain: .5 }, ...penNotes(CO.heart, K, t0, [S2D - .5], t0 + S2D - .5)]; }).filter((e) => e.t < 29.4) }
+    ...SHORTS.map((X) => ({ id: "s" + X.n, name: `Short ${X.n} · Circles draw ${X.name.toLowerCase()}`, file: `Command Loom - Short ${X.n} - Circles Draw ${X.name}.mp4`,
+      W: 1080, H: 1920, dur: 30, draw: zoomWrap(X.draw, 1080, 1920, (t) => 1 + .03 * t / 30), voice: "glass", events: () => X.events().filter((e) => e.t < 29.4) }))
   ];
   root.CLVideo = { title: "Command Loom · 13 Fourier Circles", timelines };
-  root.FourierVideo = { S, SH, CO, KS, ERR, SHAPES, lapsAt, timeAt, timelines };
+  root.FourierVideo = { S, SH, CO, KS, ERR, SHAPES, SHORTS, lapsAt, timeAt, timelines };
 })(typeof window !== "undefined" ? window : globalThis);

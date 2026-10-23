@@ -76,7 +76,9 @@
     { id: "s1", name: "Short 1 · Guess the song (Grieg)", file: "Command Loom - Short 1 - Guess the Song.mp4", W: VW, H: VH, dur: 30, draw: zoomWrap(short("king"), VW, VH, (t) => 1 + .04 * t / 30), voice: "marimba",
       events: () => { const sg = song("king", 26); return [...notes(sg, .3), ...reveal(sg, .3)].filter((e) => e.t < 29.4); } },
     { id: "s2", name: "Short 2 · Guess the song (Beethoven)", file: "Command Loom - Short 2 - Guess This One.mp4", W: VW, H: VH, dur: 30, draw: zoomWrap(short("joy"), VW, VH, (t) => 1 + .04 * t / 30), voice: "marimba",
-      events: () => { const sg = song("joy", 26); return [...notes(sg, .3), ...reveal(sg, .3)].filter((e) => e.t < 29.4); } }
+      events: () => { const sg = song("joy", 26); return [...notes(sg, .3), ...reveal(sg, .3)].filter((e) => e.t < 29.4); } },
+    { id: "s3", name: "Short 3 · Guess the song (Beethoven, piano)", file: "Command Loom - Short 3 - One More Song.mp4", W: VW, H: VH, dur: 30, draw: zoomWrap(short("elise"), VW, VH, (t) => 1 + .04 * t / 30), voice: "marimba",
+      events: () => { const sg = song("elise", 26); return [...notes(sg, .3), ...reveal(sg, .3)].filter((e) => e.t < 29.4); } }
   ];
   root.CLVideo = { title: "Command Loom · 18 Bounce Melody", timelines, ready: Promise.resolve() };
   root.MelodyVideo = { S, song, SONG_LEN, REPLAY, REPLAY0, timelines, RC };

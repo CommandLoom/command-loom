@@ -93,7 +93,11 @@
     { id: "s1", name: "Short 1 · Diamond", file: "Command Loom - Short 1 - Diamond.mp4", W: VW, H: VH, dur: S1D, draw: zoomWrap((ctx, t) => vert(ctx, "diamond", t), VW, VH, (t) => 1 + .04 * t / S1D), voice: "marimba",
       events: () => notes("diamond", 0, 0, S1D - .6) },
     { id: "s2", name: "Short 2 · Square", file: "Command Loom - Short 2 - Square.mp4", W: VW, H: VH, dur: S2D, draw: zoomWrap((ctx, t) => vert(ctx, "square", t), VW, VH, (t) => 1 + .04 * t / S2D), voice: "marimba",
-      events: () => notes("square", 0, 0, S2D - .6) }
+      events: () => notes("square", 0, 0, S2D - .6) },
+    // one Short for each shape of the long video, each ending 3 s after the shape reaches 0%
+    ...["circle", "triangle", "hexagon"].map((k, i) => { const d = Math.round((ZERO(k) + 3) * 30) / 30, Nm = k[0].toUpperCase() + k.slice(1);
+      return { id: "s" + (i + 3), name: `Short ${i + 3} · ${Nm}`, file: `Command Loom - Short ${i + 3} - ${Nm}.mp4`, W: VW, H: VH, dur: d, draw: zoomWrap((ctx, t) => vert(ctx, k, t), VW, VH, (t) => 1 + .04 * t / d), voice: "marimba",
+        events: () => notes(k, 0, 0, d - .6) }; })
   ];
   root.CLVideo = { title: "Command Loom · 22 Wait for Zero", timelines, ready: Promise.resolve() };
   root.ZeroVideo = { S, SHAPES, sim, ZERO, timelines, r, START };

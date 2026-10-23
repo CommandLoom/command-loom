@@ -79,7 +79,9 @@
     { id: "s1", name: "Short 1 · Circle", file: "Command Loom - Short 1 - Circle.mp4", W: VW, H: VH, dur: 30, draw: zoomWrap((ctx, t) => vert(ctx, "circle", t), VW, VH, (t) => 1 + .04 * t / 30), voice: "marimba",
       events: () => notes("circle", 0, 0, 29.4 / SLOW, SLOW) },
     { id: "s2", name: "Short 2 · Square", file: "Command Loom - Short 2 - Square.mp4", W: VW, H: VH, dur: 32, draw: zoomWrap((ctx, t) => vert(ctx, "square", t), VW, VH, (t) => 1 + .04 * t / 32), voice: "marimba",
-      events: () => notes("square", 0, 0, 31.4 / SLOW, SLOW) }
+      events: () => notes("square", 0, 0, 31.4 / SLOW, SLOW) },
+    { id: "s3", name: "Short 3 · Triangle", file: "Command Loom - Short 3 - Triangle.mp4", W: VW, H: VH, dur: 30, draw: zoomWrap((ctx, t) => vert(ctx, "triangle", t), VW, VH, (t) => 1 + .04 * t / 30), voice: "marimba",
+      events: () => [{ t: .2, k: 9, voice: "bell", gain: .5 }, { t: 1.3, k: 6, voice: "bell", gain: .35 }, ...notes("triangle", 0, 0, 29.4 / SLOW, SLOW)] }
   ];
   // the three simulations take a few seconds each: compute them before the page starts, yielding in between
   const yieldNow = () => new Promise((res) => { const ch = new MessageChannel(); ch.port1.onmessage = () => { ch.port1.close(); res(); }; ch.port2.postMessage(0); });

@@ -3,7 +3,7 @@ const path = require("path"), fs = require("fs"), vm = require("vm");
 for (const f of ["draw.js", "ring.js", "video.js"]) vm.runInThisContext(fs.readFileSync(path.join(__dirname, f), "utf8"), { filename: f });
 const V = globalThis.MelodyVideo;
 let pass = 0; const test = (n, fn) => { fn(); pass++; console.log("PASS " + n); }, ok = (c, m) => { if (!c) throw new Error(m); };
-const all = [["king", V.SONG_LEN.king], ["joy", V.SONG_LEN.joy], ["elise", V.SONG_LEN.elise], ["king", 26], ["joy", 26]];
+const all = [["king", V.SONG_LEN.king], ["joy", V.SONG_LEN.joy], ["elise", V.SONG_LEN.elise], ["king", 26], ["joy", 26], ["elise", 26]];
 test("one note per bounce: each song has exactly as many bounces as notes, and lasts the planned time", () => {
   for (const [k, d] of all) { const sg = V.song(k, d); ok(sg.H.length === sg.n + 1, k); ok(Math.abs(sg.H[sg.n].t - d) < 1e-6, k + " " + sg.H[sg.n].t);
     console.log(`    ${k} ${d}s: ${sg.n} notes, +${((sg.q - 1) * 100).toFixed(2)}% speed per bounce, last gap ${((sg.H[sg.n].t - sg.H[sg.n - 1].t) * 1000).toFixed(0)} ms`); } });

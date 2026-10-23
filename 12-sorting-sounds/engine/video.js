@@ -75,13 +75,20 @@
   const A128 = K.shuffled(128, 8), S2R = run("merge", A128, 1.2, K.ALGOS.merge(A128).length / 24);
   function s2(ctx, t) { panel(ctx, S2R, t, 40, 520, 1000, 1000, 1.2);
     D.lines(ctx, ["Merge sort,", "with sound."], 540, 160, 80, C.text, 1); D.text(ctx, "every note: the height of the bar it touches", 540, 340, 34, C.amber, 600); }
+  // Short 3: the four-way race of the long video, stacked, on the same 120 bars at the same speed
+  const S3_RATE = 420, S3 = Object.fromEntries(KEYS.map((k) => [k, run(k, A120, 1.2, S3_RATE)])), S3_Y = [400, 750, 1100, 1450];
+  function s3(ctx, t) { KEYS.forEach((k, i) => panel(ctx, S3[k], t, 50, S3_Y[i], 980, 330, 1.05));
+    const done = KEYS.filter((k) => t >= S3[k].end).length; D.lines(ctx, done < 4 ? ["Four sorts.", "Same 120 bars."] : ["Bubble sort,", "finally."], 540, 140, 76, C.text, 1);
+    D.text(ctx, "same speed: " + S3_RATE + " steps per second each", 540, 320, 32, C.amber, 600); }
   const timelines = [
     { id: "full", name: "12 Sorting Sounds (long)", file: "Command Loom - 12 Sorting Sounds.mp4", W: 1920, H: 1080, dur: 98, draw: drawFull, events: fullEvents, voice: "glass" },
     { id: "s1", name: "Short 1 · Bubble vs quicksort", file: "Command Loom - Short 1 - Bubble vs Quicksort.mp4", W: 1080, H: 1920, dur: 32, draw: zoomWrap(s1, 1080, 1920, (t) => 1 + .03 * t / 32), voice: "glass",
       events: () => [{ t: .3, k: 7, voice: "bell", gain: .5 }, ...runNotes(S1A, 7, .5, .9), ...runNotes(S1B, 9, -.5, .9)].filter((e) => e.t < 31.4) },
     { id: "s2", name: "Short 2 · Merge sort with sound", file: "Command Loom - Short 2 - Merge Sort Sound.mp4", W: 1080, H: 1920, dur: 30, draw: zoomWrap(s2, 1080, 1920, (t) => 1 + .03 * t / 30), voice: "glass",
-      events: () => [{ t: .3, k: 7, voice: "bell", gain: .5 }, ...runNotes(S2R, 14), ...[2, 7, 12].map((k) => ({ t: S2R.end + SWEEP + .2, k, voice: "bell", gain: .6 }))].filter((e) => e.t < 29.4) }
+      events: () => [{ t: .3, k: 7, voice: "bell", gain: .5 }, ...runNotes(S2R, 14), ...[2, 7, 12].map((k) => ({ t: S2R.end + SWEEP + .2, k, voice: "bell", gain: .6 }))].filter((e) => e.t < 29.4) },
+    { id: "s3", name: "Short 3 · Four sorts race", file: "Command Loom - Short 3 - Four Sorts Race.mp4", W: 1080, H: 1920, dur: 31, draw: zoomWrap(s3, 1080, 1920, (t) => 1 + .02 * t / 31), voice: "glass",
+      events: () => [{ t: .3, k: 7, voice: "bell", gain: .5 }, ...KEYS.flatMap((k, i) => runNotes(S3[k], 5, [-.6, .6, -.3, .3][i], .8)), ...[2, 7, 12].map((k) => ({ t: S3.bubble.end + SWEEP + .2, k, voice: "bell", gain: .6 }))].filter((e) => e.t < 30.4) }
   ];
   root.CLVideo = { title: "Command Loom · 12 Sorting Sounds", timelines };
-  root.SortVideo = { S, HOOK, SOLO, RACE, RATE, S1A, S1B, S2R, CLOSE_SWEEP, timelines };
+  root.SortVideo = { S, HOOK, SOLO, RACE, RATE, S1A, S1B, S2R, S3, CLOSE_SWEEP, timelines };
 })(typeof window !== "undefined" ? window : globalThis);
